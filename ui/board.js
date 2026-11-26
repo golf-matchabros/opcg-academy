@@ -1,10 +1,10 @@
 // 대전 보드 UI: 상태 렌더 + 클릭 조작 + 효과 연출(이동/파워/어택 화살표/효과 해설 배너)
-import * as E from '../engine/core.js?v=202611261908';
-import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261908';
-import { easySentence, glossify } from './easy.js?v=202611261908';
-import { evalPlay, roleOf } from './coach.js?v=202611261908';
-import { EffectReader, collectEffects } from './effect-reader.js?v=202611261908';
-import { donArea, attachedDon } from './don.js?v=202611261908';
+import * as E from '../engine/core.js?v=202611261918';
+import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261918';
+import { easySentence, glossify } from './easy.js?v=202611261918';
+import { evalPlay, roleOf } from './coach.js?v=202611261918';
+import { EffectReader, collectEffects } from './effect-reader.js?v=202611261918';
+import { donArea, attachedDon } from './don.js?v=202611261918';
 
 const KW_LABEL = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐)', doubleAttack: '더블', banish: '배니시', unblockable: '블록불가' };
 const KW_TIP = { blocker: '블로커: 상대가 어택하면 이 캐릭터를 눕혀서 대신 막을 수 있어요', rush: '속공: 나온 턴에 바로 어택할 수 있어요', rushCharacter: '속공(캐릭터): 나온 턴에 상대 캐릭터만 어택할 수 있어요', doubleAttack: '더블 어택: 리더를 맞히면 라이프 2장', banish: '배니시: 맞은 라이프가 트래시로 (트리거 불가)', unblockable: '블록 불가: 블로커로 막을 수 없어요' };
@@ -136,11 +136,12 @@ export class Board {
         ${pileHtml(P, p)}</div>${donArea(P, p, p === me)}`;
     };
     const P = G.players[me], O = G.players[op];
-    const turnTxt = G.winner !== null ? '게임 종료' : `${G.turn}턴 · <b>${esc(G.players[G.active].name)}</b>의 ${PHASE[G.phase] || G.phase} 페이즈`;
+    const rail = (p) => `<div class="mat-rail"><strong>${p === me ? '내 필드' : '상대 필드'}</strong><span aria-hidden="true">${p === me ? 'PLAYER' : 'OPPONENT'}</span><i aria-hidden="true"></i></div>`;
+    const turnTxt = G.winner !== null ? '게임 종료' : `<span class="mat-turn">${G.turn}턴</span> <b>${esc(G.players[G.active].name)}</b> <span class="mat-phase">${esc(PHASE[G.phase] || G.phase)} 페이즈</span>`;
     this.el.innerHTML = `
-      <div class="side opp">${fieldRow(op)}<div class="hand" data-pile="hand${op}">${O.hand.map(() => '<div class="card back"></div>').join('')}<span class="mut" style="align-self:center;font-size:12px">상대 패 ${O.hand.length}장</span></div></div>
+      <div class="side opp">${rail(op)}${fieldRow(op)}<div class="hand" data-pile="hand${op}">${O.hand.map(() => '<div class="card back"></div>').join('')}<span class="mut" style="align-self:center;font-size:12px">상대 패 ${O.hand.length}장</span></div></div>
       <div class="mid"><div class="turn-status"><div class="phase">${turnTxt}${G.battle ? ` · <span style="color:var(--bad)">배틀 중</span>` : ''}</div>${this.turnRules()}</div><div class="ctrl" aria-live="polite"></div></div>
-      <div class="side me">${fieldRow(me)}<div class="hand" data-pile="hand${me}">${P.hand.map(u => cardHtml(u)).join('')}</div></div>`;
+      <div class="side me">${rail(me)}${fieldRow(me)}<div class="hand" data-pile="hand${me}">${P.hand.map(u => cardHtml(u)).join('')}</div></div>`;
     this.el.querySelectorAll('img[data-src2]').forEach(im => { im.onerror = () => { im.onerror = null; im.src = im.dataset.src2; }; });
     this.renderCtrl(pend);
     try { this.drawCallout(); } catch (e) { console.warn(e); }
@@ -410,7 +411,7 @@ export class Board {
     if (!records.size && this.reader.records.length && (wasAwaiting !== this.reader.records[0].awaiting || events.some(e => e.by))) this.reader.paint();
     const sp = this.o.speed;
     // 1) 이동 (FLIP 고스트)
-    const moves = events.filter(e => e.t === 'move' || e.t === 'draw');
+    const moves = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? [] : events.filter(e => e.t === 'move' || e.t === 'draw');
     const ghosts = [];
     for (const e of moves) {
       const from = this.rects[e.uid] || this.pileRects[(e.t === 'draw' ? 'deck' : (e.from === 'deck' ? 'deck' : e.from === 'life' ? 'life' : e.from === 'trash' ? 'trash' : 'hand')) + (e.p ?? e.owner)];
@@ -442,6 +443,7 @@ export class Board {
         if (pause) this.el.querySelector('.ctrl').textContent = '상대 효과를 읽은 뒤 효과 읽기에서 계속을 누르세요.';
         if (!await this.reader.show(rec, pause) || stopped()) return;
       }
+      this.markMatEvent(e);
       const dupKO = e.t === 'move' && events.some(x => x.t === 'ko' && x.uid === e.uid);
       if (this.o.assist && e.by && !dupKO && (PT[e.t] || (e.t === 'move' && ['chars', 'stage'].includes(e.from) && e.uid !== e.by))) {
         const label = PT[e.t] ? PT[e.t](e) : ({ hand: '패로', trash: '트래시로', deck: '덱으로', life: '라이프로' }[e.to] || '이동');
@@ -451,7 +453,7 @@ export class Board {
       if (e.t === 'attack') { await this.arrow(e.attacker, e.target, '#ff5d6c'); continue; }
       if (e.t === 'block') { await this.arrow(e.uid, e.attacker, '#3fb6ff', '블록!'); continue; }
       if (e.t === 'power' || e.t === 'counter') { this.floatAt(e.target || e.uid, (e.amount ?? 0) >= 0 ? `+${e.amount ?? ''}` : `${e.amount}`, (e.amount ?? 0) >= 0 ? 'var(--good)' : 'var(--bad)', e.set != null ? `원래 파워 ${e.set}` : null); this.stepHL('power'); await sleep(650 * sp); continue; }
-      if (e.t === 'attach') { this.floatAt(e.uid, `두웅!! +1000`, 'var(--acc)'); await sleep(300 * sp); continue; }
+      if (e.t === 'attach') { this.floatAt(e.uid, `붙은 두웅!! ${e.don}장`, 'var(--acc)'); await sleep(300 * sp); continue; }
       if (e.t === 'clash') { this.floatAt(e.target, `${e.ap} vs ${e.tp}`, e.win ? 'var(--bad)' : 'var(--good)'); await sleep(800 * sp); continue; }
       if (e.t === 'damage') { const n = this.el.querySelector(`[data-pile="life${e.p}"]`); if (n) { n.classList.remove('flash'); void n.offsetWidth; n.classList.add('flash'); } this.floatPile(`life${e.p}`, '대미지!', 'var(--bad)'); await sleep(600 * sp); continue; }
       if (e.t === 'ko') { this.floatPile(`trash${e.owner}`, 'KO', 'var(--bad)'); await sleep(350 * sp); continue; }
@@ -466,6 +468,29 @@ export class Board {
       if (e.t === 'manual') { this.toast('미지원 효과: 이 단계는 적용하지 않아요'); continue; }
       if (e.t === 'gameover') { continue; }
     }
+  }
+  // A printed edge lifts briefly at the affected card/pile; never wait for it or change card transforms.
+  markMatEvent(e) {
+    if (!this.el.parentElement || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    let key, kind, pile = false;
+    switch (e.t) {
+      case 'attack': key = e.attacker; kind = 'attack'; break;
+      case 'clash': key = e.target; kind = 'clash'; break;
+      case 'move': if (!['chars','stage'].includes(e.to)) return; key = e.uid; kind = 'play'; break;
+      case 'event': key = `trash${e.p}`; pile = true; kind = 'play'; break;
+      case 'attach': key = e.uid; kind = 'don'; break;
+      case 'don': if (!(e.add || e.ret || e.activate || e.rest)) return; key = `don${e.p}`; pile = true; kind = 'don'; break;
+      case 'ko': key = `trash${e.owner}`; pile = true; kind = 'ko'; break;
+      default: return;
+    }
+    const node = this.el.querySelector(`[data-${pile ? 'pile' : 'uid'}="${CSS.escape(String(key))}"]`);
+    const r = node?.getBoundingClientRect() || (e.t === 'clash' && this.rects[key]);
+    if (!r?.width) return;
+    const wrap = this.el.parentElement, frame = wrap.getBoundingClientRect();
+    const mark = document.createElement('span'); mark.className = 'mat-mark mat-' + kind;
+    mark.setAttribute('aria-hidden', 'true');
+    Object.assign(mark.style, { left: r.left-frame.left+'px', top: r.top-frame.top+'px', width: r.width+'px', height: r.height+'px' });
+    wrap.append(mark); setTimeout(() => mark.remove(), 540);
   }
   addLog(text, p) {
     if (!text) return;

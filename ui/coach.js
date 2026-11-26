@@ -1,6 +1,6 @@
 // 코치: "낼 수 있다" 와 "지금 내면 좋다" 를 구분해서 설명
-import * as E from '../engine/core.js?v=202611261908';
-import { condText, targetText, explainAbility } from '../engine/explain.js?v=202611261908';
+import * as E from '../engine/core.js?v=202611261918';
+import { condText, targetText, explainAbility } from '../engine/explain.js?v=202611261918';
 
 const KW = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐릭터만)', doubleAttack: '더블 어택', banish: '배니시', unblockable: '블록 불가' };
 

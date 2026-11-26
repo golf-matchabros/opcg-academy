@@ -1,6 +1,6 @@
 // Local practice opponent. No rollout of the real game, private decklist, RNG,
 // event history or opponent hand. All policy/engine queries use this allowlist.
-import * as E from './core.js?v=202611261908';
+import * as E from './core.js?v=202611261918';
 
 function observation(g, p) {
   const cards = Object.create(null), q = g.pending;

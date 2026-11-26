@@ -1,12 +1,12 @@
 // 앱: 라우터 + 카드 사전 + 덱 + 연습 대전 + 효과 시연 + 튜토리얼 + 온라인 대전
-import * as E from '../engine/core.js?v=202611261908';
-import { practiceStep } from '../engine/practice-ai.js?v=202611261908';
-import { newOpening, applyOpening, openingView, HANDS } from '../engine/opening.js?v=202611261908';
-import { drawOpening } from './opening.js?v=202611261908';
-import { explainCard } from '../engine/explain.js?v=202611261908';
-import { validateDeck } from '../engine/rules.js?v=202611261908';
-import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261908';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261908';
+import * as E from '../engine/core.js?v=202611261918';
+import { practiceStep } from '../engine/practice-ai.js?v=202611261918';
+import { newOpening, applyOpening, openingView, HANDS } from '../engine/opening.js?v=202611261918';
+import { drawOpening } from './opening.js?v=202611261918';
+import { explainCard } from '../engine/explain.js?v=202611261918';
+import { validateDeck } from '../engine/rules.js?v=202611261918';
+import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261918';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611261918';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -21,7 +21,7 @@ let current = null; // 현재 화면 정리 함수
 
 async function boot() {
   const [cards, effects, decks, glossary, reg, lessons] = await Promise.all([
-    getJSON('data/cards.json?v=202611261908', []), getJSON('data/effects.json?v=202611261908', {}), getJSON('data/decks.json?v=202611261908', []), getJSON('data/glossary.json?v=202611261908', {}), getJSON('data/regulation.json?v=202611261908', {}), getJSON('data/lessons.json?v=202611261908', []),
+    getJSON('data/cards.json?v=202611261918', []), getJSON('data/effects.json?v=202611261918', {}), getJSON('data/decks.json?v=202611261918', []), getJSON('data/glossary.json?v=202611261918', {}), getJSON('data/regulation.json?v=202611261918', {}), getJSON('data/lessons.json?v=202611261918', []),
   ]);
   const ord = c => { const m = c.no.match(/^([A-Z]+)(\d+)-(\d+)/); if (!m) return [9, 0, 0]; const t = { OP: 0, EB: 1, ST: 2, PRB: 3, P: 4 }[m[1]] ?? 5; return [t, -(+m[2]), +m[3]]; };
   cards.sort((a, b) => { const x = ord(a), y = ord(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.no.localeCompare(b.no); });
@@ -332,21 +332,28 @@ export function getDeck(v) { if (!v) return null; if (v.startsWith('auto:')) ret
 function defaultDeckId(i = 0) { const ds = db.decks.filter(d => deckLegal(d)); return ds.length ? ds[i % ds.length].id : 'auto:' + (db.bases.filter(c => c.type === 'leader')[i]?.no); }
 function pagePlay(main, arg) {
   setNav('play');
-  main.innerHTML = `<h1>연습 대전 (AI)</h1><div class="filters">
+  main.innerHTML = `<section class="arena-lobby"><header class="arena-heading"><div><small>ODDLYS CARD ACADEMY</small><h1>연습 대전 <span>AI</span></h1></div><span class="arena-edition">오들리즈 비공식 연습장</span></header><div class="arena-versus" aria-label="오늘의 리더 대진"><div id="captain-0" class="captain"></div><b class="arena-vs" aria-hidden="true">VS</b><div id="captain-1" class="captain rival"></div></div><div class="filters arena-controls">
     <label>내 덱 <select id="d0" style="max-width:300px">${deckOptions(arg || defaultDeckId(0))}</select></label>
     <label>AI 덱 <select id="d1" style="max-width:300px">${deckOptions(defaultDeckId(1))}</select></label>
     <label>상대 난이도 <select id="opponent-level"><option value="tactical">실전 AI</option><option value="basic">입문 AI</option></select></label>
-    <button class="pri" id="go">가위바위보로 시작</button></div>
+    <button class="pri" id="go">가위바위보로 시작</button></div></section>
     <div id="order-note" role="status"></div><div id="bd"><section class="intro"><h2>첫 턴은 이렇게 시작해</h2>
     <p>가위바위보에서 이긴 사람이 선공이나 후공을 골라. 그다음 첫 패 5장을 보고, 그대로 시작하거나 딱 한 번 전부 바꿀 수 있어.</p>
     <p>턴 드로우와 두웅!!은 게임이 알아서 처리해. 선공 첫 턴에는 카드를 뽑지 않고 두웅!! 1장만 받아. 낼 카드가 없으면 <b>턴 종료</b>를 눌러. 양쪽 모두 자기 첫 턴에는 어택할 수 없어.</p><p><b>AI 효과는 읽고 넘어가.</b> 상대 카드가 효과를 쓰면 해설에서 무엇이 바뀌는지 확인하고 <b>읽었어 · 계속</b>을 눌러.</p><a href="#/lesson/l2-turn">두웅!!으로 카드 내기부터 연습하기</a></section></div>`;
   const level=$('#opponent-level'); level.value=localStorage.getItem('practice-level')==='basic'?'basic':'tactical';
   level.onchange=()=>localStorage.setItem('practice-level',level.value);
   if (!arg) $('#d1').selectedIndex = Math.min(1, $('#d1').options.length - 1);
+  function drawCaptain(p) {
+    const d=getDeck($('#d'+p).value), c=db.cards.get(d?.leader), slot=$('#captain-'+p);if(!c)return;
+    slot.innerHTML='<img class="captain-art" alt=""><div class="captain-id"><small></small><h2></h2><p></p></div>';
+    slot.querySelector('img').src=imgBig(c);slot.querySelector('small').textContent=p?'02 / 상대 리더':'01 / 내 리더';slot.querySelector('h2').textContent=c.name;
+    slot.querySelector('p').textContent=c.no+'  ·  라이프 '+c.life;
+  }
+  for(const p of [0,1]) {drawCaptain(p);$('#d'+p).addEventListener('change',()=>drawCaptain(p));}
   let match, board;
   const start = () => {
     match?.stop(); board?.destroy(); match = board = null;
-    const setup = newOpening(), root = $('#bd'), ui = $('#go').closest('.filters');
+    const setup = newOpening(), root = $('#bd'), ui = $('#go').closest('.arena-lobby');
     const tactical = level.value === 'tactical';
     const ds = [getDeck($('#d0').value),getDeck($('#d1').value)];
     ui.hidden = true; ui.style.display='none'; $('#order-note').textContent='';
@@ -490,7 +497,7 @@ const PEER_PREFIX = 'oddlys-opcg-rps1-';
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] };
 function loadPeer() {
   if (window.Peer) return Promise.resolve();
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261908'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261918'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
 }
 function pageOnline(main) {
   setNav('online');
