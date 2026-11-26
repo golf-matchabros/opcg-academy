@@ -1,0 +1,54 @@
+/* SOUNDINGS / TABLE EDITION. A two-ink sheet from a ship's field book.
+   Faces stay in the renderer; the edition draws only stock, backs and furniture. */
+.play-wrap,.lesson-guide.coach{--te-navy:#203e43;--te-ink:#242e2d;--te-pine:#235851;--te-rust:#803e2b;--te-rule:#b7b7a4;--te-paper:#fffaf0;--te-muted:#4d5c57;--te-serif:Georgia,"Iowan Old Style","AppleMyungjo","Batang",serif;--cb-ink:var(--te-ink);--cb-blue:var(--te-pine);--cb-paper:var(--te-paper);--cb-muted:var(--te-muted);--cb-key:#efd394}
+.play-wrap .board{color:var(--te-ink);background:#cec9b8;border:1px solid #606962;border-radius:5px;padding:clamp(7px,1vw,15px);box-shadow:inset 0 0 0 3px #e9e5d7,0 3px 0 #858879;min-width:0}
+.board .side,.board .side.opp{--te-field:#e8eddf;--te-rail:#28594e;--te-stitch:#849d8d;color:var(--te-ink);background:var(--te-field) url('art/soundings.svg') right center/min(100%,660px) auto no-repeat;border:1px solid var(--te-stitch);border-radius:2px;box-shadow:none;padding:clamp(8px,.8vw,14px);gap:10px}
+.board .side.opp{--te-field:#f1e7d3;--te-rail:#814631;--te-stitch:#b2a28c}
+.board .mat-rail{gap:10px;color:var(--te-rail);padding-bottom:5px;border-bottom:1px solid var(--te-stitch)}
+.board .mat-rail strong,.board .opp .mat-rail strong{font:800 15px/1.15 var(--te-serif);padding:1px 0;border:0;color:var(--te-rail);background:none}
+.board .mat-rail span{font:700 9px/1.2 ui-monospace,monospace;letter-spacing:.18em}.board .mat-rail i{height:5px;opacity:.75;background:none;border-inline-end:3px double var(--te-rail);border-bottom:1px solid var(--te-stitch)}
+.board .side .hand{background:#fffcf145;border-radius:0}.board .side.me .hand{border-top:1px solid var(--te-stitch);padding-bottom:10px}.board .side.opp .hand{border-bottom:1px dotted var(--te-stitch);padding:4px 0 8px}
+.board .zlabel{font-size:12px;line-height:1.4;color:var(--te-muted);text-align:center}.board .side .mut{color:var(--te-muted)}
+/* Healthy gutters and original, unmasked art rectangles. Do not override action outlines. */
+.board button.card{box-shadow:0 2px 3px #2f352b3d}.board button.card img,.board .pile.trash img{object-fit:contain;opacity:1}
+.board .frow .slot>.pile,.board .pile{background:#fffcf044;color:#54645d;border:1px dashed #829286;border-radius:4px;box-shadow:none}
+.board .pile[data-pile^=deck],.board .side .card.back,.flyer>.card.back{background:#173c47 url('art/twin-sounding.svg') center/100% 100% no-repeat;border:1px solid #213f41;border-radius:5px;box-shadow:0 2px 2px #303c3436}
+.board .pile[data-pile^=deck]{flex-direction:row;align-items:flex-end;gap:3px;padding:0 3px 2px;color:#fff4cf;font-weight:700;line-height:18px;font-size:11px;box-shadow:inset 0 -20px #19383a,1px 2px #dedacb,2px 3px #7b8070,3px 4px #e1ddcf,4px 5px #6f796e}
+.board .pile[data-pile^=deck] b{font:700 18px/19px Georgia,serif;color:#fff5d6}
+.board .pile.trash b{position:absolute;right:-2px;bottom:-3px;padding:1px 5px;color:var(--te-paper);background:var(--te-navy);border:1px solid #e8dfcb;border-radius:1px;font:700 15px/1.15 Georgia,serif}
+.board .pile.trash:not(:has(img)) b{position:static;background:none;border:0;color:#566861;font-size:18px}
+.board .side .life .lc{border:1px solid #284a47;border-radius:4px;background:#173c47;box-shadow:0 1px 1px #24372d55;overflow:hidden}
+.board .life .lc:not(.face-up):not([data-face-up=true]):not(:has(img))::before{content:"";width:68%;aspect-ratio:180/252;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(90deg);background:url('art/twin-sounding.svg') center/100% 100% no-repeat;pointer-events:none}
+.board .side .life .lc:is(.face-up,[data-face-up=true],:has(img)){background:#f7f2e5}.board .life .lc img{display:block;width:100%;height:100%;object-fit:contain}.board .life .num{font:700 24px/1 var(--te-serif);color:var(--te-navy)}
+/* A bell belongs ONLY to the unspent stock. The public active/rested/attached DON faces remain alone. */
+.board .don{color:var(--te-ink);background:#fffaf0c9;border:0;border-block:1px solid var(--te-stitch);border-radius:0;padding-block:6px}
+.board .don-head{position:relative;padding-inline-start:40px;min-height:44px;align-content:center;gap:2px}.board .don-head:has([data-don-deck]:not([data-don-deck="0"]))::before{content:"";position:absolute;left:0;top:50%;width:29px;height:41px;transform:translateY(-51%) rotate(-3deg);background:url('art/watch-bell.svg') center/contain no-repeat;border-radius:2px;box-shadow:1px 2px #e3d5b6,2px 3px #8c7563;pointer-events:none}.board .don-head:has([data-don-deck="0"]){padding-left:0}
+.board .don-head strong{font-family:var(--te-serif);font-size:15px;color:var(--te-rust)}.board .don-head .don-stock,.board .don-empty{color:var(--te-muted);font-size:12px}.board .don-lane{border-color:#c6c7b5}.board .don-caption,.board .don-caption b,.board .don-attached{color:var(--te-pine)}.board [data-don-lane=rested] .don-caption,.board [data-don-lane=rested] .don-caption b{color:#55645c}.board .field-piece.with-don{background:#f8f2df85;box-shadow:inset 0 -1px #a8a590;border-radius:3px}
+/* The active captain is the single cut-in; plates and decision copy share a paper spine. */
+.board .mid{background:var(--te-paper);border:1px solid #6a766c;border-inline-start:4px solid var(--te-pine);border-radius:2px;box-shadow:0 2px 0 #9b9f90;color:var(--te-ink);padding:11px 14px}
+.board .comic-portrait{width:clamp(64px,6vw,86px);height:58px;transform:none;border:1px solid #39473c;background:#efe9d7;box-shadow:2px 2px #c7c5b2}.board .comic-portrait img{transform:scale(1.26);object-position:50% 27%}
+.board .comic-byline strong{font:800 19px/1.25 var(--te-serif)}.board .mat-turn{background:none;color:var(--te-rust);font:700 16px/1.1 var(--te-serif);border-right:1px solid var(--te-rule);padding:0 7px 0 0;border-radius:0}.board .mat-phase,.board .turn-rule,.board .resource-line span{color:var(--te-muted)}
+.board .ctrl .prompt{border:0;border-inline-start:2px solid var(--te-pine);background:#e8eddf;border-radius:0;color:var(--te-ink)}
+.board .ctrl button:not(.choice-card),.play-wrap .effect-reader button,.play-wrap .panel button,.lesson-guide.coach button{color:var(--te-ink);background:#fffaf0;border:1px solid #929a8c;border-radius:3px;box-shadow:0 1px 0 #9ba392;font-weight:650}
+.board .ctrl button.pri,.play-wrap .effect-reader button.pri,.lesson-guide.coach button.pri,.play-wrap .panel button.on{background:var(--te-pine);color:#fffbed;border-color:var(--te-pine);box-shadow:0 2px #173d35}
+.board .ctrl button:not(.choice-card):not(:disabled):hover,.play-wrap .panel button:hover,.lesson-guide.coach button:not(:disabled):hover{background:#31574d;color:#fffbed}
+.board .callout{background:#f3ead5;border:0;border-inline-start:3px solid #ab7750;border-radius:0;box-shadow:none;color:var(--te-ink)}.board .callout::before{content:none}.board .comic-next{background:none;color:var(--te-rust);border-radius:0;font-weight:850;padding:0 5px 0 0}.board .callout .mut,.board .callout .cwhy{color:var(--te-muted)}
+/* Sidebar as a single column of notes, not a stack of floating cards. */
+.play-wrap .panel,.lesson-guide.coach{--fg:var(--te-ink);--mut:var(--te-muted);--good:#226348;--bad:#913b2c;--acc:#8c5925;--acc2:#245951;--line:#b5b9a9;--panel:#f7f2e4;--bg2:#efe9d9;color:var(--te-ink);border:1px solid #9eaa99;border-radius:3px;background:#f5f0e2;box-shadow:inset 0 3px #40594f}
+.play-wrap .panel{padding:14px 15px;gap:13px}.play-wrap .effect-reader,.play-wrap .effect-reader[data-waiting=true]{color:var(--te-ink);background:none;border:0;border-bottom:3px double #9ba794;border-radius:0;box-shadow:none;padding:3px 0 10px}.play-wrap .effect-reader[data-waiting=true]{border-bottom-color:#b5874f}
+.play-wrap .effect-reader h3{font:800 19px/1.3 var(--te-serif)}.play-wrap .effect-reader .er-status,.play-wrap .effect-reader[data-waiting=true] .er-status{color:#526157;background:none;padding:0;border-radius:0}.play-wrap .effect-reader[data-waiting=true] .er-status{color:var(--te-rust);text-decoration:underline;text-underline-offset:3px}
+.play-wrap .effect-reader :is(summary,dt),.play-wrap .effect-reader .er-current p b,.play-wrap .match-log summary,.play-wrap .assistbox summary{color:var(--te-pine)}.play-wrap .effect-reader details{border-color:#bbc2ae}
+.play-wrap .assistbox{background:none;border:0;border-bottom:1px solid var(--te-rule);border-radius:0;padding:0 0 10px}.play-wrap .assistbox>b:first-child{font:800 18px/1.4 var(--te-serif)}.play-wrap .assistbox .recline{color:var(--te-pine)}.play-wrap .assistbox .plan{background:#e7e8d9;border:0;border-radius:1px}
+.play-wrap .preview,.play-wrap .nowbox{background:#fffbef;border:1px solid var(--te-rule);color:var(--te-ink);border-radius:2px}.play-wrap .nowbox :is(.good,.ok){color:#245e44}.play-wrap .nowbox .bad{color:#973c2b}.play-wrap .nowbox .meh{color:#835126}.play-wrap .panel .sizebar{color:var(--te-muted)}.play-wrap .panel .ghost{background:none;font-size:12px}.play-wrap .panel summary:focus-visible,.lesson-guide.coach button:focus-visible{outline:2px solid var(--te-pine);outline-offset:3px}
+.lesson-guide.coach{border-inline-start:4px solid var(--te-rust);padding-block:12px}.lesson-guide.coach .who{font:800 15px/1.3 var(--te-serif);color:var(--te-rust)}.lesson-guide.coach [aria-live]:not(:empty){color:var(--te-pine)}
+@media(max-width:760px){.play-wrap .board{padding:6px}.board .side,.board .side.opp{padding:7px;gap:8px}.board .mid{padding:10px;margin-bottom:8px}.board .don-head{min-height:39px;align-items:center;padding-inline-start:34px}.board .don-head::before{max-width:25px;max-height:35px}.board .mat-rail span{letter-spacing:.1em}.board .mat-rail strong{font-size:14px}.play-wrap .panel{padding:12px}.play-wrap .panel button{min-height:38px}.board .callout{font-size:13px}.board .comic-portrait{width:61px;height:49px}.board .turn-rule{font-size:12px;line-height:1.5}}
+/* A mixed life pile opens into a compact contact sheet in its actual order.
+   Only stack the backs when every card is private; a later card must never
+   hide a revealed face. No IDs, image requests or inferred faces for backs. */
+.board .life .stack:has(.face-up){--te-life-w:clamp(38px,calc(var(--card-w) * .53),65px);display:grid;grid-template-columns:repeat(2,var(--te-life-w));gap:3px;width:auto;height:auto;align-items:center;justify-content:center}
+.board .life .stack:has(.face-up) .lc{position:relative;top:auto!important;left:auto;width:var(--te-life-w);height:auto;aspect-ratio:180/252;border-radius:3px}
+.board .life .stack:has(.face-up) .lc.back::before{inset:0;width:auto;aspect-ratio:auto;transform:none}
+.board .life .stack:has(.face-up) .face-up img{position:absolute;inset:0;object-fit:contain}
+.board .field-piece + .zlabel{margin-top:5px}
+.board .pile.trash:has(img) b{right:0;bottom:-4px;transform:translateY(58%);border-radius:1px}
+.board .zone>div:has(.pile.trash img)>.zlabel{margin-top:10px}

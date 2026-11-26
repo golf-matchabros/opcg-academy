@@ -25,6 +25,18 @@ export function effectsOf(db, no) {
   const r = e[no] || (c && e[c.base]) || EMPTY_EFF;
   if (!r._x) {
     const x = { ...r, abilities: (r.abilities || []).flatMap(ab => ab.timing2 ? [ab, { ...ab, timing: ab.timing2, timing2: null }] : [ab]) };
+    if ((c?.base || no) === 'OP15-058' && r !== EMPTY_EFF) {
+      x.abilities = x.abilities.map(ab => {
+        if (ab.timing === 'static') return { ...ab, steps: [{ do: 'startingDonDeck', n: 6 }] };
+        if (ab.timing !== 'activateMain') return ab;
+        return { ...ab, condition: { ownTurnAtLeast: 2 }, steps: [
+          { do: 'addDon', state: 'active', n: 1, upTo: true, quantityKey: 'enelActive' },
+          { do: 'addDon', state: 'rested', n: 4, upTo: true, quantityKey: 'enelRested' },
+          { do: 'attachDon', state: 'rested', n: 4, upTo: true, quantityKey: 'enelAttach', target: { side: 'self', zone: 'character', count: 1 } },
+        ] };
+      });
+      x.coverage = 1; x.unparsed = [];
+    }
     Object.defineProperty(r, '_x', { value: x, enumerable: false });
   }
   return r._x;
@@ -105,6 +117,8 @@ export function createScenario(spec, db) {
   for (let p = 0; p < 2; p++) {
     const s = spec.players[p] || {};
     const P = { name: s.name || (p ? '상대' : '나'), leader: null, chars: [], stage: null, hand: [], deck: [], trash: [], life: [], donDeck: s.donDeck ?? 0, donActive: s.donActive ?? 0, donRested: s.donRested ?? 0, mull: true };
+    // Scenarios can specify extra turns; otherwise infer an alternating opening.
+    P.turnsTaken = s.turnsTaken ?? Math.floor((G.turn + (G.active === p ? 1 : 0)) / 2);
     G.players.push(P);
     P.leader = mk(G, s.leader || 'ST01-001', p); G.cards[P.leader].zone = 'leader';
     if (s.leaderRested) G.cards[P.leader].rested = true;
@@ -234,7 +248,7 @@ export function power(G, db, uid) {
   for (const m of G.mods) if (m.target === uid && m.kind === 'power') pw += m.value;
   for (const st of staticEffectsOn(G, db, uid, ['power'])) pw += st.amount || 0;
   if (c.owner === G.active) pw += (c.don || 0) * 1000;
-  return Math.max(0, pw);
+  return pw;
 }
 export function costOf(G, db, uid) {
   const c = def(G, db, uid); let k = c.cost || 0;
@@ -362,6 +376,7 @@ export function evalCond(G, db, c, ctx) {
     oppCharCountAtMost: v => O.chars.filter(u => matchFilter(G, db, u, v.filter, ctx)).length <= v.n,
     thisRested: () => G.cards[ctx.src]?.rested === true,
     thisActive: () => G.cards[ctx.src]?.rested === false,
+    ownTurnAtLeast: v => G.active === ctx.p && (P.turnsTaken ?? Math.ceil(G.turn / 2)) >= v,
     yourTurn: () => G.active === ctx.p, oppTurn: () => G.active !== ctx.p,
     leaderRested: () => G.cards[P.leader].rested,
     lifeLessThanOpp: () => P.life.length < O.life.length,
@@ -558,8 +573,37 @@ function execAction(G, db, item) {
   if (item.optAnswer === false) { ctx.prevDone = false; return; }
   if (a.at === 'endOfThisTurn' && !item.delayedNow) { (G.delayed = G.delayed || []).push({ ...item, delayedNow: true }); log(G, '이번 턴 종료 시 처리할 효과 예약', ctx.p); return; }
   ctx.prevDone = true;
+  if (a.quantityKey) {
+    // Resolve one quantity at a time; the previous choice changes the available pool.
+    const attaching = a.do === 'attachDon';
+    const available = attaching ? (P.chars.length ? P.donRested : 0) : P.donDeck;
+    const max = Math.min(a.n, available);
+    if (!max) { ctx.prevDone = false; return; }
+    const { quantityKey, ...step } = a;
+    if (item.choice === undefined && !G.ai[ctx.p]) {
+      const options = Array.from({ length: max + 1 }, (_, n) => n ? [{ ...step, n, upTo: false }] : []);
+      const text = attaching ? '내 캐릭터 1장에게 부여할 레스트 두웅!! 수를 고르세요' :
+        (a.state === 'active' ? '액티브' : '레스트') + ' 상태로 추가할 두웅!! 수를 고르세요';
+      pushFront(G, [item]);
+      G.pending = { type: 'option', key: quantityKey, p: ctx.p, src: ctx.src, text, options, labels: options.map((_, n) => n + '장') };
+      return 'wait';
+    }
+    const n = Math.min(item.choice ?? max, max);
+    if (n) pushFront(G, [{ a: { ...step, n, upTo: false }, ctx }]);
+    else ctx.prevDone = false;
+    return;
+  }
   const tgt = () => resolveTargets(G, db, item);
   const each = (fn) => { const s = tgt(); if (s === 'wait') return 'wait'; if (!s.length) ctx.prevDone = false; for (const u of s) fn(u); };
+  const moveTargets = (to, opts = {}, lifeEvent = false) => {
+    const targets = tgt(); if (targets === 'wait') return 'wait';
+    ctx.prevDone = false;
+    for (const u of targets) {
+      if (opponentLeavePrevented(G, db, u, ctx.p)) continue;
+      moveCard(G, db, u, to, opts); ctx.prevDone = true;
+      if (lifeEvent) ev(G, { t: 'life', p: G.cards[u].owner, delta: +1 });
+    }
+  };
   const pickFrom = (pool, n, text, upTo = true, chooser = ctx.p) => {
     if (item.sel) return item.sel;
     if (!pool.length) { ctx.prevDone = false; return item.sel = []; }
@@ -597,14 +641,19 @@ function execAction(G, db, item) {
     case 'costMod': return each(u => { addMod(G, { kind: 'costMod', target: u, value: a.amount, duration: a.duration }, ctx.p); ev(G, { t: 'cost', uid: u, amount: a.amount }); });
     case 'grant': return each(u => { addMod(G, { kind: 'grant', target: u, value: a.keyword, duration: a.duration }, ctx.p); ev(G, { t: 'grant', uid: u, keyword: a.keyword }); });
     case 'negate': return each(u => { addMod(G, { kind: 'negate', target: u, duration: a.duration }, ctx.p); ev(G, { t: 'negate', uid: u }); });
-    case 'ko': return each(u => koCard(G, db, u, 'effect', ctx.p));
+    case 'ko': {
+      const targets = tgt(); if (targets === 'wait') return 'wait';
+      ctx.prevDone = false;
+      for (const u of targets) if (koCard(G, db, u, 'effect', ctx.p)) ctx.prevDone = true;
+      return;
+    }
     case 'rest': return each(u => { G.cards[u].rested = true; ev(G, { t: 'rest', uid: u }); fireEvt(G, db, 'onRested', (e, x) => x === u); });
     case 'setActive': return each(u => { G.cards[u].rested = false; ev(G, { t: 'active', uid: u }); });
-    case 'bounce': return each(u => moveCard(G, db, u, 'hand'));
-    case 'toDeckBottom': return each(u => moveCard(G, db, u, 'deck', { bottom: true }));
-    case 'toDeckTop': return each(u => moveCard(G, db, u, 'deck'));
-    case 'toTrash': return each(u => moveCard(G, db, u, 'trash'));
-    case 'toLife': return each(u => moveCard(G, db, u, 'life', { faceUp: !!a.faceUp }));
+    case 'bounce': return moveTargets('hand');
+    case 'toDeckBottom': return moveTargets('deck', { bottom: true });
+    case 'toDeckTop': return moveTargets('deck');
+    case 'toTrash': return moveTargets('trash');
+    case 'toLife': return moveTargets('life', { faceUp: !!a.faceUp });
     case 'discard': {
       const n = a.n || 1;
       const who = a.side === 'opp' ? opp(ctx.p) : ctx.p;
@@ -686,7 +735,7 @@ function execAction(G, db, item) {
       return;
     }
     case 'addLife': {
-      if (a.from === 'field') return each(u => { moveCard(G, db, u, 'life', { faceUp: !!a.faceUp }); ev(G, { t: 'life', p: G.cards[u].owner, delta: +1 }); });
+      if (a.from === 'field') return moveTargets('life', { faceUp: !!a.faceUp }, true);
       for (let i = 0; i < (a.n || 1); i++) {
         if (a.from === 'hand') {
           if (!P.hand.length) break;
@@ -751,8 +800,14 @@ function onCharEnter(G, db, uid, p) {
   const abs = e.abilities.filter(ab => ab.timing === 'onPlay');
   for (let i = abs.length - 1; i >= 0; i--) fireAbility(G, db, uid, abs[i], p);
 }
+// This prevention does not forbid choosing the card; it applies when an effect would move it.
+function opponentLeavePrevented(G, db, uid, byP) {
+  if (byP == null || byP === G.cards[uid].owner || !['chars', 'stage'].includes(G.cards[uid].zone) || !hasKw(G, db, uid, 'cannotLeaveFieldByOppEffect')) return false;
+  log(G, nm(G, db, uid) + ': 상대 효과로 필드를 벗어나지 않아요');
+  return true;
+}
 export function koCard(G, db, uid, why, byP = null) {
-  if (zoneOf(G, uid) !== 'chars') return;
+  if (zoneOf(G, uid) !== 'chars' || (why === 'effect' && opponentLeavePrevented(G, db, uid, byP))) return false;
   if (hasKw(G, db, uid, 'cannotBeKOd') || (why === 'battle' && hasKw(G, db, uid, 'cannotBeKOdInBattle')) || (why === 'effect' && hasKw(G, db, uid, 'cannotBeKOdByEffect')) || (why === 'effect' && byP != null && byP !== G.cards[uid].owner && hasKw(G, db, uid, 'cannotBeKOdByOppEffect'))) { log(G, `${nm(G, db, uid)}은(는) KO 되지 않아요`); return; }
   const owner = G.cards[uid].owner;
   const e = effectsOf(db, G.cards[uid].no);
@@ -766,6 +821,7 @@ export function koCard(G, db, uid, why, byP = null) {
   if (why === 'battle' && G.battle) fireEvt(G, db, 'onBattleKO', (ev2, u) => u === G.battle.attacker);
   log(G, `${nm(G, db, uid)} KO`, owner);
   for (let i = onKO.length - 1; i >= 0; i--) pushFront(G, [{ sys: 'abilityStart', ab: onKO[i], ctx: { p: owner, src: uid, abText: onKO[i].src, no: G.cards[uid].no } }]);
+  return true;
 }
 
 // ---------- 턴 진행 ----------
@@ -1164,6 +1220,7 @@ export function viewFor(G, p) {
   V.players[p].deck = V.players[p].deck.map(() => 'hidden');
   for (const P of V.players) P.life = P.life.map(l => l.faceUp ? l : { uid: 'hidden', faceUp: false });
   const pending = G.pending;
+  const publicLife = new Set(G.players.flatMap(P=>P.life.filter(l=>l.faceUp===true).map(l=>l.uid)));
   const choiceCards = new Set();
   if (pending?.p === p) {
     if (pending.type === 'search') for (const u of pending.looked || []) choiceCards.add(u);
@@ -1172,11 +1229,11 @@ export function viewFor(G, p) {
   }
   for (const uid of Object.keys(V.cards)) {
     const c = V.cards[uid];
-    const visible = choiceCards.has(uid) || ['chars', 'stage', 'trash', 'leader'].includes(c.zone) || (c.zone === 'hand' && c.owner === p) || G.players[c.owner].leader === uid;
+    const visible = (c.zone === 'life' && publicLife.has(uid)) || choiceCards.has(uid) || ['chars', 'stage', 'trash', 'leader'].includes(c.zone) || (c.zone === 'hand' && c.owner === p) || G.players[c.owner].leader === uid;
     if (!visible) V.cards[uid] = { uid, owner: c.owner, zone: c.zone, hidden: true };
   }
   V.rngState = 0; V.queue = V.queue.length ? [{ hidden: true }] : [];
-  if (V.pending && ['search', 'target', 'counter', 'trigger'].includes(V.pending.type) && V.pending.p !== p) V.pending = { type: V.pending.type, p: V.pending.p, text: '상대가 선택 중' };
+  if (V.pending && ['search', 'target', 'counter', 'trigger', 'option'].includes(V.pending.type) && V.pending.p !== p) V.pending = { type: V.pending.type, p: V.pending.p, text: '상대가 선택 중' };
   return V;
 }
 
@@ -1259,7 +1316,7 @@ export function aiRespond(G, db, p) {
     case 'yesno': return { type: 'yesno', yes: true };
     case 'target': case 'search': { const it = G.queue[0]; const sel = aiPickTargets(G, db, it?.a || { do: 'x' }, pend.options, pend.max, it?.ctx || { p }, p); return { type: 'choose', uids: sel.slice(0, Math.max(pend.min || 0, Math.min(pend.max, sel.length))) }; }
     case 'manual': return { type: 'manualDone' };
-    case 'option': return { type: 'option', index: 0 };
+    case 'option': return { type: 'option', index: pend.labels ? pend.options.length - 1 : 0 };
   }
   return null;
 }

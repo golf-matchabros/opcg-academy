@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 252" width="180" height="252">
+<title>Twin Sounding • reversible whale engraving</title>
+<defs>
+ <pattern id="braid" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(38)"><path d="M0 0v7" stroke="#e0d3a8" stroke-width="3"/></pattern>
+ <g id="plate">
+  <!-- Bearings in the upper corners; turned impression below. -->
+  <g stroke="#efdfb5" fill="none" stroke-linecap="round"><path d="M18 48V20h27m90 0h27v28M19 31l10-10m123 0 9 10" stroke-width="1.7"/><path d="M32 24l3 4m6-4 2 3m105-3-3 4m-6-4-2 3"/></g>
+  <path d="M76 23q14 7 28 0l-14 11z" fill="#edb15f"/><path d="M66 23l10 6m38-6-10 6" stroke="#efdfb5" fill="none"/>
+  <!-- A cetacean turns at the surface. White-line cuts follow the volume, not a flat hatch. -->
+  <path d="M24 86C21 78 33 63 51 56c16-7 36-6 50 2 9 5 14 11 22 10 8-1 14-9 17-17-10 0-17-6-19-16 9 5 19 3 24 12 6-10 12-13 18-14-1 11-8 20-16 22-4 19-16 35-37 38-11 2-20-1-26-3-5 7-17 15-31 18l9-17C46 96 31 94 24 86Z" fill="#f6e9c7" stroke="#173c47" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M25 83c11 3 26-2 34-8 6-6 8-11 8-15-7 8-21 17-39 19m37 10c7-5 11-9 14-17 3 7 2 13-3 19l-18 13zM90 58c11 2 22 14 31 14 7 1 14-3 20-10-6 13-17 20-31 18-10-1-18-6-27-9l17 3z" fill="#316169"/>
+  <g stroke="#244752" stroke-width="1.3" fill="none" stroke-linecap="round"><path d="M28 86c12 3 25-2 34-10m-28 13c11 1 24-4 31-12m-23 13c10-1 20-6 26-13m22 3c15 8 31 7 42-1m-37 6c11 4 23 3 30 0M125 39l15 9m20-11-12 14"/><path d="M36 69l5-3m3-1 7-3m8-3 6-1m8-1 5 1"/></g>
+  <circle cx="58" cy="70" r="3.3" fill="#173c47"/><circle cx="57.5" cy="69.4" r="1" fill="#f7e8c5"/>
+  <g fill="none" stroke="#cfdece" stroke-linecap="round"><path d="M19 99c9 3 14 2 21 0m-20 6c12 4 21 2 28-1m70-7c14 1 25-4 35-12m-34 17c15 0 26-3 38-10m-26 14c11-1 20-4 28-9M47 46c7-5 19-8 25-8m-19 10 15-5" stroke-width="1.5"/><path d="M26 111c9 2 17 1 23-1m88-1 13-4M23 60l3-2m4-3 4-1m108 24 4-2m4-2 3-2"/></g>
+  <path d="M19 118c26 4 36-9 52-6m39 0c18 3 25 10 50 1" fill="none" stroke="#eab36c" stroke-width="1.5"/>
+ </g>
+</defs>
+<rect width="180" height="252" rx="9" fill="#173c47"/>
+<rect x="5" y="5" width="170" height="242" rx="6" stroke="#ebd8a9" fill="none" stroke-width="2"/>
+<rect x="10" y="10" width="160" height="232" rx="4" stroke="url(#braid)" stroke-width="3" fill="none"/>
+<rect x="13.5" y="13.5" width="153" height="225" rx="3" stroke="#cbd0af" stroke-width=".9" fill="none"/>
+<use href="#plate"/><use href="#plate" transform="rotate(180 90 126)"/>
+<g transform="translate(90 126)" fill="none" stroke="#ecdcb5"><circle r="16"/><circle r="13" stroke-dasharray="1 3"/><path d="M-25 0h5m40 0h5M0-24v5m0 38v5"/></g>
+<path d="M90 107l4.2 14.8L109 126l-14.8 4.2L90 145l-4.2-14.8L71 126l14.8-4.2z" fill="#e1a657"/><path d="M90 110v16l-15 0 12-3zm0 32v-16h15l-12 3z" fill="#fff2ce"/>
+</svg>

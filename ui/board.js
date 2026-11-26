@@ -1,10 +1,11 @@
 // 대전 보드 UI: 상태 렌더 + 클릭 조작 + 효과 연출(이동/파워/어택 화살표/효과 해설 배너)
-import * as E from '../engine/core.js?v=202611261922';
-import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261922';
-import { easySentence, glossify } from './easy.js?v=202611261922';
-import { evalPlay, roleOf } from './coach.js?v=202611261922';
-import { EffectReader, collectEffects } from './effect-reader.js?v=202611261922';
-import { donArea, attachedDon } from './don.js?v=202611261922';
+import * as E from '../engine/core.js?v=202611262018';
+import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611262018';
+import { easySentence, glossify } from './easy.js?v=202611262018';
+import { evalPlay, roleOf } from './coach.js?v=202611262018';
+import { EffectReader, collectEffects } from './effect-reader.js?v=202611262018';
+import { donArea, attachedDon } from './don.js?v=202611262018';
+import { cardMentor, mentorHtml } from './card-mentor.js?v=202611262018';
 
 const KW_LABEL = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐)', doubleAttack: '더블', banish: '배니시', unblockable: '블록불가' };
 const KW_TIP = { blocker: '블로커: 상대가 어택하면 이 캐릭터를 눕혀서 대신 막을 수 있어요', rush: '속공: 나온 턴에 바로 어택할 수 있어요', rushCharacter: '속공(캐릭터): 나온 턴에 상대 캐릭터만 어택할 수 있어요', doubleAttack: '더블 어택: 리더를 맞히면 라이프 2장', banish: '배니시: 맞은 라이프가 트래시로 (트리거 불가)', unblockable: '블록 불가: 블로커로 막을 수 없어요' };
@@ -28,7 +29,7 @@ export class Board {
     root.innerHTML = `<div class="play-wrap"><div class="board"></div><aside class="panel"><section class="effect-reader" aria-label="효과 읽기"></section><div class="assist"></div><div class="preview" style="display:none"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="sizebar">카드 크기 <button data-sz="s">작게</button><button data-sz="m">보통</button><button data-sz="l">크게</button></div><div class="sizebar">확대 보기 <button class="zm">${localStorage.getItem('zoom') === '0' ? '꺼짐' : '켜짐'}</button></div><button class="ghost as">초보 도우미: ${this.o.assist ? '켜짐' : '꺼짐'}</button><button class="ghost sp">연출 속도: 보통</button><button class="ghost lg">로그 지우기</button></div><details class="match-log"><summary>대전 로그</summary><div class="log"></div></details></aside></div>`;
     this.el = root.querySelector('.board');
     this.asEl = root.querySelector('.assist'); this.pvEl = root.querySelector('.preview');
-    root.querySelector('.as').onclick = (e) => { this.o.assist = !this.o.assist; localStorage.setItem('assist', this.o.assist ? '1' : '0'); e.target.textContent = '초보 도우미: ' + (this.o.assist ? '켜짐' : '꺼짐'); this.render(); };
+    root.querySelector('.as').onclick = (e) => { this.closeMenu(); this.pvEl.style.display = 'none'; this.o.assist = !this.o.assist; localStorage.setItem('assist', this.o.assist ? '1' : '0'); e.target.textContent = '초보 도우미: ' + (this.o.assist ? '켜짐' : '꺼짐'); this.render(); };
     this.el.addEventListener('mouseover', e => { const n = e.target.closest('[data-uid]'); if (n && n.dataset.uid !== this._hov) { this._hov = n.dataset.uid; this.preview(n.dataset.uid); } });
     this.el.addEventListener('mouseleave', () => { this._hov = null; this.pvEl.style.display = 'none'; this.hideZoom(); });
     // 카드 크기
@@ -115,10 +116,11 @@ export class Board {
         const kws = Object.keys(KW_LABEL).filter(k => E.hasKw(G, this.db, uid, k));
         if (kws.length) badges += `<div class="kw">${kws.map(k => `<span data-tip="${esc(KW_TIP[k] || '')}">${KW_LABEL[k]}</span>`).join('')}</div>`;
       }
-      const locked = this.busy || this.sending || (pend && !optSet.has(uid)) || (this.sel && !optSet.has(uid) && !atkTargets.has(uid));
+      const explainDefense = this.o.assist && i.owner === me && ((pend?.type === 'counter' && i.zone === 'hand') || (pend?.type === 'block' && i.zone === 'chars'));
+      const locked = this.busy || this.sending || (pend && !optSet.has(uid) && !explainDefense) || (this.sel && !optSet.has(uid) && !atkTargets.has(uid));
       return `<button type="button" ${locked && !(onField && i.owner===op) ? 'disabled' : ''} class="${cls}" data-uid="${uid}" aria-label="${esc(c.name)}" title="${esc(c.name)}"><img alt="" src="${imgSrc(c)}" data-src2="${c.src}" loading="lazy">${badges}${this.coachTags(uid)}${extra}</button>`;
     };
-    const lifeHtml = (P, p) => `<div class="life" data-pile="life${p}" data-tip="라이프: 리더가 맞으면 1장씩 손패로 가요. 0장일 때 한 번 더 맞으면 패배!"><div class="stack">${P.life.map((l, k) => `<div class="lc" style="top:${k * 8}px" data-life="${p}"></div>`).join('')}</div><div class="num">${P.life.length}</div><div class="zlabel">라이프</div></div>`;
+    const lifeHtml = (P, p) => `<div class="life" data-pile="life${p}" data-tip="라이프: 리더가 맞으면 1장씩 손패로 가요. 0장일 때 한 번 더 맞으면 패배!"><div class="stack">${P.life.map((l, k) => { const c = l.faceUp && !l.hidden && this.cardOf(l.uid); return c ? `<div class="lc face-up" style="top:${k * 8}px" data-life="${p}" title="공개 라이프: ${esc(c.name)}"><img alt="${esc(c.name)}" src="${esc(imgSrc(c))}"></div>` : `<div class="lc back" style="top:${k * 8}px" data-life="${p}" title="비공개 라이프"></div>`; }).join('')}</div><div class="num">${P.life.length}</div><div class="zlabel">라이프</div></div>`;
     const fieldSlot = uid => {
       const card = G.cards[uid];
       const attached = card && !card.hidden && card.don > 0 ? attachedDon(uid, card.don, esc(this.C(card.no).name)) : '';
@@ -137,10 +139,14 @@ export class Board {
     };
     const P = G.players[me], O = G.players[op];
     const rail = (p) => `<div class="mat-rail"><strong>${p === me ? '내 필드' : '상대 필드'}</strong><span aria-hidden="true">${p === me ? 'PLAYER' : 'OPPONENT'}</span><i aria-hidden="true"></i></div>`;
+    const leader = this.cardOf(G.players[G.active].leader);
+    // Decorative cut-in only. The playable leader and zoom use the complete sample card.
+    const leaderInset = leader && G.winner === null ? `<span class="comic-portrait" aria-hidden="true"><img alt="" src="${esc(imgSrc(leader))}"></span>` : '';
+    const leaderCaption = leaderInset ? `<div class="comic-byline">${G.active === me ? '내 리더' : '상대 리더'} <strong>${esc(leader.name)}</strong></div>` : '';
     const turnTxt = G.winner !== null ? '게임 종료' : `<span class="mat-turn">${G.turn}턴</span> <b>${esc(G.players[G.active].name)}</b> <span class="mat-phase">${esc(PHASE[G.phase] || G.phase)} 페이즈</span>`;
     this.el.innerHTML = `
       <div class="side opp">${rail(op)}${fieldRow(op)}<div class="hand" data-pile="hand${op}">${O.hand.map(() => '<div class="card back"></div>').join('')}<span class="mut" style="align-self:center;font-size:12px">상대 패 ${O.hand.length}장</span></div></div>
-      <div class="mid"><div class="turn-status"><div class="phase">${turnTxt}${G.battle ? ` · <span style="color:var(--bad)">배틀 중</span>` : ''}</div>${this.turnRules()}</div><div class="ctrl" aria-live="polite"></div></div>
+      <div class="mid"><div class="turn-status"><div class="comic-turn-heading">${leaderInset}<div>${leaderCaption}<div class="phase">${turnTxt}${G.battle ? ' · <span class="comic-battle">배틀 중</span>' : ''}</div></div></div>${this.turnRules()}</div><div class="ctrl" aria-live="polite"></div></div>
       <div class="side me">${rail(me)}${fieldRow(me)}<div class="hand" data-pile="hand${me}">${P.hand.map(u => cardHtml(u)).join('')}</div></div>`;
     this.el.querySelectorAll('img[data-src2]').forEach(im => { im.onerror = () => { im.onerror = null; im.src = im.dataset.src2; }; });
     this.renderCtrl(pend);
@@ -236,7 +242,7 @@ export class Board {
     const d = document.createElement('div'); d.className = 'callout';
     let why = '';
     if (step.a.type === 'play') { const ev = this.evalOf(step.uid); why = (ev.good[0] || ev.info[0] || ''); if (ev.grade === 'meh') why = (ev.bad[0] || '') + (ev.info.find(x => x.includes('의미')) ? ' · ' + ev.info.find(x => x.includes('의미')) : ''); }
-    d.innerHTML = `<b>① ${verb}</b><div>${esc(step.text)}</div>${why ? `<div class="cwhy">${esc(why)}</div>` : ''}${step.a.type !== 'endTurn' ? '<div class="mut" style="font-size:11px">카드를 눌러서 메뉴에서 고르면 돼요</div>' : ''}`;
+    d.innerHTML = `<span class="comic-next">추천 행동</span> <b>${verb}</b><div>${esc(step.text)}</div>${why ? `<div class="cwhy">${esc(why)}</div>` : ''}${step.a.type !== 'endTurn' ? '<div class="mut" style="font-size:11px">카드를 눌러서 메뉴에서 고르면 돼요</div>' : ''}`;
     this.el.querySelector('.mid').appendChild(d);
   }
   computeAssist(pend) {
@@ -361,10 +367,10 @@ export class Board {
       else if (unknownCond) btns = '<button class="pri" data-a="no">미적용 확인</button>';
       else if (pend.type === 'yesno') btns = `<button class="pri" data-a="yes">예</button><button data-a="no">아니오</button>`;
       else if (pend.type === 'trigger') btns = `<button class="pri" data-a="tyes">트리거 발동</button><button data-a="tno">패에 넣기</button>`;
-      else if (pend.type === 'block') btns = `<span class="mut">빛나는 블로커를 누르면 막아요</span><button data-a="noblock">막지 않기</button>`;
-      else if (pend.type === 'counter') btns = `<span class="mut">빛나는 패 카드를 누르면 카운터로 써요</span><button class="pri" data-a="nocounter">카운터 끝</button>`;
+      else if (pend.type === 'block') btns = `<span class="mut">${this.o.assist ? '블로커를 눌러 설명을 읽고 막기를 골라요' : '빛나는 블로커를 누르면 막아요'}</span><button data-a="noblock">막지 않기</button>`;
+      else if (pend.type === 'counter') btns = `<span class="mut">${this.o.assist ? '손패를 눌러 확인한 뒤 카운터 사용을 골라요' : '빛나는 패 카드를 누르면 카운터로 써요'}</span><button class="pri" data-a="nocounter">카운터 끝</button>`;
       else if (pend.type === 'target' || pend.type === 'search') btns = `<span class="mut">${this.picks.length}/${pend.max}장 선택${pend.min ? ` (최소 ${pend.min})` : ' (고르지 않아도 돼요)'}</span><button class="pri" data-a="choose" ${this.picks.length < (pend.min || 0) ? 'disabled' : ''}>${this.picks.length || pend.min ? '선택 확인' : '고르지 않고 계속'}</button>`;
-      else if (pend.type === 'option') btns = pend.options.map((o, k) => `<button class="pri" data-opt="${k}">${esc(o.map(x => { try { return actionText(x); } catch { return x.do; } }).join(' → '))}</button>`).join('');
+      else if (pend.type === 'option') btns = pend.options.map((o, k) => `<button class="pri" data-opt="${k}">${esc(pend.labels?.[k] ?? o.map(x => { try { return actionText(x); } catch { return x.do; } }).join(' → '))}</button>`).join('');
       else if (pend.type === 'manual') btns = `<strong>미지원 효과: 이 단계는 적용하지 않아요.</strong><button class="pri" data-a="mdone">안내 확인 후 계속</button>`;
       box.innerHTML = `<div class="prompt"><div class="t">${t}</div>${btns}</div>`;
       if (pend.type === 'search' || pend.type === 'target') this.showChoices(pend);
@@ -374,7 +380,7 @@ export class Board {
       const L = this.legal;
       const moves = [L.play.length && `낼 수 있는 카드 ${L.play.length}장`, L.attack.length && `어택 가능 ${L.attack.length}장`, L.activate.length && `사용 가능한 효과 ${L.activate.length}개`, L.attachDon && '남은 두웅!! 붙이기'].filter(Boolean);
       if (this.sel) box.innerHTML = `<strong>${this.sel.mode === 'replace' ? '트래시로 보낼 내 캐릭터를 고르세요.' : '어택할 상대 대상을 고르세요.'}</strong><button data-a="cancel">선택 취소</button>`;
-      else box.innerHTML = `<div class="move-hint">${moves.length ? '<b>강조된 카드를 눌러 행동을 골라요.</b><div>' + moves.join(' · ') + '</div>' : '<b>지금 할 수 있는 행동이 없어요.</b><div>턴을 종료하면 상대 차례가 돼요.</div>'}</div><button class="pri" data-a="end">턴 종료</button>`;
+      else box.innerHTML = `<div class="move-hint">${this.o.assist ? '<small class="mentor-hint">내 카드를 누르면 지금 쓸 수 있는지, 왜 안 되는지 볼 수 있어요.</small>' : ''}${moves.length ? '<b>강조된 카드를 눌러 행동을 골라요.</b><div>' + moves.join(' · ') + '</div>' : '<b>지금 할 수 있는 행동이 없어요.</b><div>턴을 종료하면 상대 차례가 돼요.</div>'}</div><button class="pri" data-a="end">턴 종료</button>`;
     } else box.innerHTML = G.winner === null ? '<span class="mut">상대 차례…</span>' : '';
     box.querySelectorAll('button[data-a]').forEach(b => b.onclick = (e) => { e.stopPropagation(); this.onCtrl(b.dataset.a); });
     box.querySelectorAll('button[data-opt]').forEach(b => b.onclick = (e) => { e.stopPropagation(); this.send({ type: 'option', index: +b.dataset.opt }); });
@@ -491,6 +497,15 @@ export class Board {
     mark.setAttribute('aria-hidden', 'true');
     Object.assign(mark.style, { left: r.left-frame.left+'px', top: r.top-frame.top+'px', width: r.width+'px', height: r.height+'px' });
     wrap.append(mark); setTimeout(() => mark.remove(), 540);
+    // A single sound word in the turn header, never on a card or on an uncommitted hover.
+    if (kind === 'clash') {
+      const header = this.el.querySelector('.comic-turn-heading .phase');
+      if (header && !header.querySelector('.comic-sfx')) {
+        const hit = document.createElement('span'); hit.className = 'comic-sfx';
+        hit.setAttribute('aria-hidden', 'true'); hit.textContent = '쾅!';
+        header.append(hit); setTimeout(() => hit.remove(), 540);
+      }
+    }
   }
   addLog(text, p) {
     if (!text) return;
@@ -569,6 +584,7 @@ export class Board {
         else if (pend.max === 1) this.picks = [uid];
         this.render(); return;
       }
+      if (this.o.assist && G.cards[uid]?.owner === me && ((pend.type === 'counter' && G.players[me].hand.includes(uid)) || (pend.type === 'block' && G.players[me].chars.includes(uid)))) { this.openMenu(n, uid); return; }
       if (pend.type === 'block' && pend.options.includes(uid)) { this.send({ type: 'block', uid }); return; }
       if (pend.type === 'counter' && pend.options.includes(uid)) { this.send({ type: 'counter', uid }); return; }
       return; // Pending choices must not fall through to an unrelated menu.
@@ -589,6 +605,10 @@ export class Board {
     const G = this.G, me = this.me, i = G.cards[uid]; if (!i || i.hidden) return;
     const c = this.C(i.no); const L = this.legal || { play: [], attack: [], activate: [] };
     const items = [];
+    const pend = G.pending;
+    if (this.o.assist && !this.observing && pend?.p === me && ['counter','block'].includes(pend.type) && pend.options.includes(uid)) {
+      items.push([pend.type === 'counter' ? '이 카드로 카운터 사용' : '이 블로커로 막기', () => this.send({type:pend.type, uid})]);
+    }
     if (this.isMyMain() && i.owner === me) {
       if (L.play.includes(uid)) items.push([c.type === 'event' ? `이벤트 사용 (코스트 ${E.costOf(G, this.db, uid)})` : `내기 (코스트 ${E.costOf(G, this.db, uid)})`, () => this.playCard(uid)]);
       if (L.attack.includes(uid)) items.push(['어택하기', () => { this.sel = { mode: 'attack', uid }; this.render(); }]);
@@ -600,10 +620,13 @@ export class Board {
     }
     items.push(['카드 설명 보기', () => this.o.onCardInfo && this.o.onCardInfo(i.no)]);
     const m = document.createElement('div'); m.className = 'menu';
-    m.innerHTML = `<div class="h">${esc(c.name)} · ${c.no}</div>`;
+    const help = this.o.assist && !this.observing && i.owner === me ? mentorHtml(cardMentor(G,this.db,uid,me,L)) : '';
+    if (help) m.className += ' mentor-menu';
+    m.innerHTML = `<div class="h">${esc(c.name)} · ${esc(c.no)}</div>${help}`;
+    const rev = this.revision;
     for (const [label, fn] of items) {
       if (!fn) { const h = document.createElement('div'); h.className = 'h'; h.textContent = label; m.appendChild(h); continue; }
-      const b = document.createElement('button'); b.textContent = label; b.onclick = (ev) => { ev.stopPropagation(); this.closeMenu(); fn(); }; m.appendChild(b);
+      const b = document.createElement('button'); b.textContent = label; b.onclick = (ev) => { ev.stopPropagation(); if (this.menu !== m || rev !== this.revision || this.busy || this.sending || this.destroyed) return; this.closeMenu(); fn(); }; m.appendChild(b);
     }
     document.body.appendChild(m);
     const r = node.getBoundingClientRect();

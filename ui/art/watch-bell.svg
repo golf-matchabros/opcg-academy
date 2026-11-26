@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 140" width="100" height="140">
+<title>Watch Bell • resource deck</title>
+<rect width="100" height="140" rx="6" fill="#803b2a"/><rect x="4" y="4" width="92" height="132" rx="4" fill="none" stroke="#f6deb0" stroke-width="2"/>
+<path d="M10 29V10h20m40 0h20v19M10 111v19h20m40 0h20v-19" fill="none" stroke="#d6ad74" stroke-width="2"/>
+<path d="M50 11l3 7-3 7-3-7zm0 104 3 7-3 7-3-7z" fill="#f4c879"/>
+<g fill="none" stroke="#e8c494" stroke-linecap="round"><path d="M15 37l15 10m54-10L70 47M13 52l13 5m61-5-13 5M12 70h12m64 0H76M13 89l13-5m61 5-13-5M19 102l11-9m51 9-11-9" stroke-width="2.2"/><path d="M15 43l6 3m64-3-6 3M13 59l7 2m67-2-7 2m-67 17 7-1m67 1-7-1"/></g>
+<circle cx="50" cy="41" r="6" fill="none" stroke="#f5dc9b" stroke-width="3.5"/>
+<path d="M29 76c7-5 6-12 8-20 2-8 7-12 13-12s11 4 13 12c2 8 1 15 8 20l2 5c-13 4-33 4-46 0z" fill="#f8db99" stroke="#442e26" stroke-width="2.4"/>
+<path d="M42 66c1-11 4-16 8-18m3 0c5 6 2 17 5 22m-27 7q19 5 39 0m-36-4q15 4 32 0" fill="none" stroke="#935030" stroke-width="2.5"/><path d="M44 86q5 11 12 0" fill="#f8db99"/>
+<path d="M22 101l8-6h40l8 6-8 6H30z" fill="#f3d9a7"/><text x="50" y="104.8" text-anchor="middle" font-family="Georgia,serif" font-size="12" font-weight="bold" fill="#603722" letter-spacing="1.6">DON!!</text>
+</svg>

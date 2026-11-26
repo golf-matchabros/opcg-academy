@@ -1,0 +1,5 @@
+/* Advice belongs to the existing player action menu, not a second dialog. */
+.menu.mentor-menu{width:min(25rem,calc(100vw - 20px));padding:9px;background:#112035;color:#f8fafc;line-height:1.4}
+.menu.mentor-menu .h{color:#d6e6ed;font-size:.82rem;font-weight:650}
+.card-mentor{overflow:auto;overscroll-behavior:contain;max-height:min(36vh,21rem);min-height:4rem;flex:0 1 auto;padding:0 4px 3px;font-size:.87rem;scrollbar-width:thin}
+.card-mentor h4{color:#fff;margin:0 0 5px;font-size:1rem}.cm-row{border-top:1px solid #415469;padding:6px 0}.cm-row>div{display:flex;align-items:baseline;justify-content:space-between;gap:6px}.cm-row span{font-size:.76rem;font-weight:700;color:#c5d5e0}.cm-ready span{color:#9fe6be}.cm-blocked span,.cm-check span{color:#ffce89}.cm-unknown span{color:#e2b9ff}.cm-row p{margin:2px 0;color:#e6edf3;overflow-wrap:anywhere}.card-mentor summary{cursor:pointer;color:#c4dcf6;padding:4px 0}.card-mentor summary:focus-visible,.card-mentor:focus-visible{outline:2px solid #f4cc7a;outline-offset:-2px}.mentor-hint{display:block;line-height:1.3}

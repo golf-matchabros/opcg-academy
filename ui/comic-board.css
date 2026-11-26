@@ -1,0 +1,42 @@
+/* Teaching mat: printed panels and one small character cut-in. The mat skin is
+   independent from the card sizes, zoom bounds and the responsive reader grid. */
+.play-wrap{--cb-ink:#172d43;--cb-blue:#086ba9;--cb-paper:#fffaf0;--cb-muted:#425969;--cb-key:#ffdb72}
+.play-wrap .board{color:var(--cb-ink);background:#fff9eb;border-color:var(--cb-ink);box-shadow:inset 0 0 0 3px #fff9eb,inset 0 0 0 4px #adbdc4;border-radius:11px}
+.board .side,.board .side.opp{--mat-tint:#e6f4ff;--mat-dot:#36789b14;--mat-edge:#397b9e;background:radial-gradient(circle at 1px 1px,var(--mat-dot) 1px,transparent 1.2px) 0 0/8px 8px,var(--mat-tint);border-color:var(--mat-edge);border-radius:6px;box-shadow:none}
+.board .side.opp{--mat-tint:#fff5df;--mat-dot:#a8722013;--mat-edge:#a58341}
+.board .mat-rail{color:var(--cb-ink)}
+.board .mat-rail strong{background:var(--cb-blue);color:white;border-color:var(--cb-ink);border-radius:0 4px 4px 0}
+.board .opp .mat-rail strong{background:#f9d477;color:var(--cb-ink)}
+.board .mat-rail i{height:4px;border:0;background:linear-gradient(to right,var(--mat-edge),transparent);opacity:.62}
+.board .side .mut,.board .zlabel{color:var(--cb-muted)}
+.board .hand{background:#ffffff66}
+.board .frow .slot>.pile,.board .pile{background:#fffaf0bd;border-color:#718896;color:var(--cb-muted);box-shadow:inset 0 0 0 3px #ffffff80}
+.board .pile b,.board .life .num{color:var(--cb-ink)}
+.board .pile.trash b,.board .card .pw{color:#fff;background:#172d43}
+.board .card .pw.up{color:#a9f3ba}.board .card .pw.down{color:#ffbdb1}
+.board .side .life .lc,.board .side .card.back{border-color:#284d64;background:repeating-linear-gradient(128deg,transparent 0 7px,#fff2 7px 8px),linear-gradient(130deg,#3989b2,#235675);box-shadow:inset 0 0 0 2px #235675,inset 0 0 0 3px #cae4ef,0 2px 2px #22384830}
+.board .side .life .lc{background:repeating-linear-gradient(128deg,transparent 0 7px,#fff3 7px 8px),#337bb2}
+.board .don{background:#f5faff;border-color:#69899d;border-radius:5px}
+.board .don-lane{border-color:#91a9b8}.board .don-head,.board .don-caption,.board .don-caption b,.board .don-attached{color:#184d70}.board .don-stock,.board .don-empty,.board [data-don-lane=rested] .don-caption,.board [data-don-lane=rested] .don-caption b{color:#3f5364}
+.board .mid{color:var(--cb-ink);background:var(--cb-paper);border-color:var(--cb-ink);border-radius:5px;box-shadow:inset 4px 0 var(--cb-blue),2px 3px 0 #29495d}
+.comic-turn-heading{display:flex;align-items:center;gap:9px;min-width:0}.comic-turn-heading>div{min-width:0;overflow-wrap:anywhere}
+.comic-portrait{flex:none;width:clamp(56px,6vw,80px);height:53px;overflow:hidden;transform:skew(-5deg);background:#c3e9fa;border:2px solid var(--cb-ink);box-shadow:2px 2px 0 #94bfd3;pointer-events:none}
+.comic-portrait img{display:block;width:100%;height:100%;object-fit:cover;object-position:50% 22%;transform:skew(5deg) scale(1.18)}
+.comic-byline{font-size:12px;color:var(--cb-muted);margin-bottom:4px}.comic-byline strong{color:var(--cb-ink);font-size:15px}
+.board .turn-status .phase,.board .phase b,.board .resource-line strong{color:var(--cb-ink)}.board .mat-phase,.board .resource-line span,.board .turn-rule,.board .move-hint div,.board .ctrl>.mut{color:var(--cb-muted)}
+.board .mat-turn{color:white;background:var(--cb-blue);border-radius:2px}.comic-battle{color:#a33a23}
+.board .ctrl .prompt{border-color:var(--cb-blue);background:#e9f6ff;color:var(--cb-ink);border-radius:5px}.board .ctrl .prompt .mut{color:var(--cb-muted)}
+.board .ctrl button:not(.choice-card),.play-wrap .effect-reader button{border:1px solid var(--cb-ink);background:#fff;color:var(--cb-ink);border-radius:5px;font-weight:750}
+.board .ctrl button.pri,.play-wrap .effect-reader button.pri{color:white;background:var(--cb-blue);box-shadow:1px 2px 0 var(--cb-ink)}
+.board .ctrl button:not(:disabled):hover,.play-wrap .effect-reader button:hover{color:white;background:#12476b}
+.board .callout{position:relative;background:#fff;border:1px solid var(--cb-ink);border-radius:4px 12px 12px 12px;color:var(--cb-ink);box-shadow:2px 2px 0 #aac5d4}
+.board .callout::before{content:'';position:absolute;left:18px;top:-5px;width:7px;height:7px;transform:rotate(45deg);border-top:1px solid var(--cb-ink);border-left:1px solid var(--cb-ink);background:white;pointer-events:none}
+.board .callout b{color:var(--cb-ink)}.board .callout .mut,.board .callout .cwhy{color:var(--cb-muted)}.comic-next{display:inline-block;margin:0 4px 3px 0;padding:2px 6px;font-size:11px;font-weight:800;color:var(--cb-ink);background:var(--cb-key);border-radius:2px}
+.play-wrap .effect-reader{color:var(--cb-ink);background:#fffdf6;border:1px solid var(--cb-ink);border-radius:5px;box-shadow:inset 0 3px var(--cb-blue),2px 2px 0 #7893a2}
+.play-wrap .effect-reader h3{font-size:16px;color:var(--cb-ink)}.play-wrap .effect-reader .er-status{font-weight:750;padding:1px 7px;color:#204d6b;background:#e0f1fb;border-radius:3px}
+.play-wrap .effect-reader[data-waiting=true]{background:#fff9e7;box-shadow:inset 0 4px var(--cb-key),2px 2px 0 var(--cb-ink)}.play-wrap .effect-reader[data-waiting=true] .er-status{background:var(--cb-key);color:var(--cb-ink)}
+.play-wrap .effect-reader small,.play-wrap .effect-reader .mut{color:var(--cb-muted)}.play-wrap .effect-reader details{border-color:#a6b5bd}.play-wrap .effect-reader summary,.play-wrap .effect-reader dt,.play-wrap .er-current p b{color:#145578}.play-wrap .effect-reader summary:hover{color:#0a3b5b;text-decoration:underline}
+.play-wrap .board :is(button,[data-trash]):focus-visible,.play-wrap .effect-reader :is(button,summary):focus-visible{outline:3px solid #162d45!important;outline-offset:3px;box-shadow:0 0 0 3px white}
+/* One confirmed clash, one short ink accent. It stays out of the card layer. */
+.comic-sfx{display:inline-block;transform:rotate(-7deg);background:var(--cb-key);color:var(--cb-ink);font-weight:900;font-size:12px;line-height:1.2;padding:2px 4px;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.comic-sfx{display:none}.play-wrap .effect-reader .er-status{animation:none}}

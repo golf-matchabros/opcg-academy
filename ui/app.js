@@ -1,12 +1,13 @@
 // 앱: 라우터 + 카드 사전 + 덱 + 연습 대전 + 효과 시연 + 튜토리얼 + 온라인 대전
-import * as E from '../engine/core.js?v=202611261922';
-import { practiceStep } from '../engine/practice-ai.js?v=202611261922';
-import { newOpening, applyOpening, openingView, HANDS } from '../engine/opening.js?v=202611261922';
-import { drawOpening } from './opening.js?v=202611261922';
-import { explainCard } from '../engine/explain.js?v=202611261922';
-import { validateDeck } from '../engine/rules.js?v=202611261922';
-import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261922';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261922';
+import * as E from '../engine/core.js?v=202611262018';
+import { practiceStep } from '../engine/practice-ai.js?v=202611262018';
+import { newOpening, applyOpening, openingView, HANDS } from '../engine/opening.js?v=202611262018';
+import { drawOpening } from './opening.js?v=202611262018';
+import { explainCard } from '../engine/explain.js?v=202611262018';
+import { validateDeck } from '../engine/rules.js?v=202611262018';
+import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611262018';
+import { cardCaution } from './rule-cautions.js?v=202611262018';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611262018';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -21,7 +22,7 @@ let current = null; // 현재 화면 정리 함수
 
 async function boot() {
   const [cards, effects, decks, glossary, reg, lessons] = await Promise.all([
-    getJSON('data/cards.json?v=202611261922', []), getJSON('data/effects.json?v=202611261922', {}), getJSON('data/decks.json?v=202611261922', []), getJSON('data/glossary.json?v=202611261922', {}), getJSON('data/regulation.json?v=202611261922', {}), getJSON('data/lessons.json?v=202611261922', []),
+    getJSON('data/cards.json?v=202611262018', []), getJSON('data/effects.json?v=202611262018', {}), getJSON('data/decks.json?v=202611262018', []), getJSON('data/glossary.json?v=202611262018', {}), getJSON('data/regulation.json?v=202611262018', {}), getJSON('data/lessons.json?v=202611262018', []),
   ]);
   const ord = c => { const m = c.no.match(/^([A-Z]+)(\d+)-(\d+)/); if (!m) return [9, 0, 0]; const t = { OP: 0, EB: 1, ST: 2, PRB: 3, P: 4 }[m[1]] ?? 5; return [t, -(+m[2]), +m[3]]; };
   cards.sort((a, b) => { const x = ord(a), y = ord(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.no.localeCompare(b.no); });
@@ -37,7 +38,7 @@ async function boot() {
   route();
 }
 
-function setNav(key) { document.querySelectorAll('.top nav a').forEach(a => a.classList.toggle('on', a.dataset.k === key)); }
+function setNav(key) { document.body.dataset.section=key; document.querySelectorAll('.top nav a').forEach(a=>{const here=a.dataset.k===key;a.classList.toggle('on',here);if(here)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');}); }
 function route() {
   if (current && current.cleanup) current.cleanup(); current = null;
   document.querySelectorAll('.coach,.menu,.modal-bg,.flyer,.float,svg.arrow').forEach(n => n.remove());
@@ -55,23 +56,15 @@ function pageHome(main) {
   const covs = Object.values(db.effects).map(e => e.coverage ?? 0);
   const full = covs.filter(x => x >= 0.999).length;
   main.innerHTML = `
-    <h1>원피스 카드게임 한글판 아카데미</h1>
-    <p class="mut">한글 카드 문장을 쉬운 말과 그래픽으로 풀어 보면서, 모의 게임으로 직접 배워요. 오들리즈 내부용.</p>
-    <div class="tiles" style="margin:18px 0">
-      <a class="tile" href="#/learn"><h3>1. 튜토리얼</h3><div class="mut">규칙 기초부터 상황 퍼즐까지 단계별 레슨</div></a>
-      <a class="tile" href="#/cards"><h3>2. 카드 사전</h3><div class="mut">한글판 ${db.list.length.toLocaleString()}장 · 효과 풀이 · 효과 시연</div></a>
-      <a class="tile" href="#/decks"><h3>3. 덱</h3><div class="mut">공식 추천 덱 · 대회 덱 · 스타트 덱 ${db.decks.length}개</div></a>
-      <a class="tile" href="#/play"><h3>4. 연습 대전</h3><div class="mut">AI와 실전처럼. 효과가 나올 때마다 해설</div></a>
-      <a class="tile" href="#/online"><h3>5. 사람 vs 사람</h3><div class="mut">방 코드로 직원끼리 온라인 대전</div></a>
-      <a class="tile" href="#/rules"><h3>규칙 · 용어</h3><div class="mut">한국 시즌 레귤레이션, 용어 사전</div></a>
-    </div>
-    <h2>데이터 현황</h2>
+    <section class="logbook-cover"><div class="cover-copy"><small>ODDLYS &nbsp; / &nbsp; 카드 연습실</small><h1>첫 항해</h1><p>첫 패를 펼치고, 두웅!!을 써서<br>직접 한 장씩 내보자.</p><a class="cover-enter" href="#/learn">코치와 시작하기 <span>→</span></a><a class="cover-practice" href="#/play">바로 연습 대전</a></div><div class="cover-art" aria-hidden="true"><img src="${imgBig(db.cards.get('ST01-001'))}" alt=""></div></section>
+    <section class="index-entries" aria-label="연습실 색인">${[['cards','01','카드 사전','카드 한 장의 쓰임새 찾기'],['decks','02','덱 목록','리더와 함께 쓸 카드 보기'],['rules','03','규칙·용어','헷갈리는 표현 확인하기'],['online','04','사람 vs 사람','방 코드로 마주 앉기']].map(([route,n,name,desc])=>`<a href="#/${route}"><small>${n}</small><b>${name}</b><span>${desc}</span></a>`).join('')}</section>
+    <details class="data-colophon"><summary>수록 자료와 해석 범위</summary>
     <table class="simple" style="max-width:640px">
       <tr><td>한글판 카드</td><td>${db.list.length.toLocaleString()}장 (기본 ${db.bases.length.toLocaleString()}종 + 패러렐)</td></tr>
-      <tr><td>효과 구조화</td><td>${Object.keys(db.effects).length.toLocaleString()}종 · 완전 자동 처리 ${full.toLocaleString()}종 (미지원 효과는 적용하지 않음)</td></tr>
+      <tr><td>효과 구조화</td><td>${Object.keys(db.effects).length.toLocaleString()}종 · 문장 구조화 완료 ${full.toLocaleString()}종 (실제 판정 검증과 별개)</td></tr>
       <tr><td>덱</td><td>${db.decks.length}개</td></tr>
       <tr><td>레귤레이션</td><td>${esc(db.reg.name || '')} · 금지 ${db.reg.banned?.length || 0}종 · 금지 페어 ${db.reg.pairs?.length || 0}쌍</td></tr>
-    </table>`;
+    </table></details>`;
 }
 
 // ---------------- 카드 사전 ----------------
@@ -79,17 +72,17 @@ const cardState = { q: '', color: '', type: '', cost: '', set: '', page: 0, auto
 function pageCards(main, arg) {
   setNav('cards');
   const sets = [...new Set(db.list.map(c => c.set))];
-  main.innerHTML = `<h1>카드 사전</h1>
+  main.innerHTML = `<header class="catalog-head"><small>CARD INDEX</small><h1>카드 사전</h1><p>이름이나 번호로 카드를 찾아, 언제 쓸지 확인해 봐.</p></header>
     <div class="filters">
       <input id="q" placeholder="이름, 번호, 특징, 효과 문장 검색" style="flex:1 1 260px" value="${esc(cardState.q)}">
       <select id="color"><option value="">모든 색</option>${Object.entries(COLOR_KO).map(([k, v]) => `<option value="${k}">${v}색</option>`).join('')}</select>
       <select id="type"><option value="">모든 종류</option>${Object.entries(TYPE_KO).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
       <select id="cost"><option value="">코스트</option>${[...Array(11).keys()].map(i => `<option>${i}</option>`).join('')}</select>
       <select id="set" style="max-width:240px"><option value="">모든 상품</option>${sets.map(s => `<option>${esc(s)}</option>`).join('')}</select>
-      <select id="auto"><option value="">자동 처리 전체</option><option value="full">완전 자동</option><option value="part">미지원 부분 있음</option></select>
+      <select id="auto"><option value="">효과 해석 전체</option><option value="full">문장 해석 완료</option><option value="part">미지원 부분 있음</option></select>
       <select id="base"><option value="1">기본 카드만</option><option value="">패러렐 포함</option></select>
     </div>
-    <div class="mut" id="cnt"></div><div class="grid" id="grid" style="margin-top:10px"></div><div class="pager" id="pager"></div>`;
+    <small class="index-note">문장 해석 표시는 실제 대전 판정의 정확성을 보증하지 않아.</small><div class="mut" id="cnt"></div><div class="grid" id="grid" style="margin-top:10px"></div><div class="pager" id="pager"></div>`;
   for (const k of ['color', 'type', 'cost', 'set', 'auto', 'base']) { $('#' + k).value = cardState[k]; $('#' + k).onchange = e => { cardState[k] = e.target.value; cardState.page = 0; draw(); }; }
   let t; $('#q').oninput = e => { clearTimeout(t); t = setTimeout(() => { cardState.q = e.target.value.trim(); cardState.page = 0; draw(); }, 200); };
   function draw() {
@@ -108,7 +101,7 @@ function pageCards(main, arg) {
     $('#cnt').textContent = `${list.length.toLocaleString()}장`;
     $('#grid').innerHTML = list.slice(cardState.page * per, (cardState.page + 1) * per).map(c => {
       const cov = E.effectsOf(db, c.no).coverage ?? 0;
-      return `<div class="cthumb" data-no="${c.no}"><img loading="lazy" src="${imgSrc(c)}" data-src2="${c.src}"><div class="cov" style="color:${cov >= .999 ? 'var(--good)' : 'var(--acc)'}">${cov >= .999 ? '자동' : '미지원 부분 있음'}</div><div class="lab">${dots(c.colors)}${esc(c.name)}<br><span class="mut">${c.no}</span></div></div>`;
+      return `<button type="button" class="cthumb" data-no="${c.no}"><img alt="" loading="lazy" src="${imgSrc(c)}" data-src2="${c.src}"><div class="cov" style="color:${cov >= .999 ? 'var(--good)' : 'var(--acc)'}">${cov >= .999 ? '문장 해석됨' : '일부 미해석'}</div><div class="lab">${dots(c.colors)}${esc(c.name)}<br><span class="mut">${c.no}</span></div></button>`;
     }).join('');
     $('#grid').querySelectorAll('img[data-src2]').forEach(im => im.onerror = () => { im.onerror = null; im.src = im.dataset.src2; });
     $('#pager').innerHTML = pages > 1 ? `<button ${cardState.page ? '' : 'disabled'} id="pv">이전</button><span class="mut" style="align-self:center">${cardState.page + 1} / ${pages}</span><button ${cardState.page < pages - 1 ? '' : 'disabled'} id="nx">다음</button>` : '';
@@ -126,7 +119,7 @@ function highlightText(t) {
 const GLOSS_KEYS = ['두웅!!', '레스트', '액티브', '카운터', '트리거', '블로커', '속공', '더블 어택', '배니시', 'KO', '라이프', '리더', '스테이지', '특징', '등장 시', '기동: 메인', '어택 시', '턴 1회', 'KO 시', '블록 시', '트래시', '패', '코스트', '파워'];
 export function showCard(no) {
   const c = db.cards.get(no); if (!c) return;
-  let ex; try { ex = explainCard(no, db.effects, db.list); } catch (e) { ex = { keywords: [], abilities: [], unparsed: [] }; }
+  let ex; try { ex = explainCard(no, { [no]: E.effectsOf(db,no) }, db.list); } catch (e) { ex = { keywords: [], abilities: [], unparsed: [] }; }
   const txt = c.text + (c.trigger ? '\n' + c.trigger : '');
   const gl = GLOSS_KEYS.filter(k => txt.includes(k) || (k === '두웅!!' && /두웅/.test(txt))).filter(k => db.glossary[k]);
   const decks = db.decks.filter(d => d.leader === c.base || d.cards.some(x => x.no === c.base)).slice(0, 8);
@@ -136,7 +129,8 @@ export function showCard(no) {
     <div class="detail"><div><img class="big" src="${imgBig(c)}" data-src2="${c.src}"><div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><button class="pri demo">효과 시연 보기</button></div></div>
     <div><h1 style="margin-bottom:4px">${esc(c.name)} ${banned ? '<span class="badge no">한국 금지 카드</span>' : ''}</h1><div class="mut">${c.no} · ${esc(c.set)}</div>
       <div class="kv"><div>종류</div><div>${TYPE_KO[c.type]} ${dots(c.colors)}</div>${c.type === 'leader' ? `<div>라이프</div><div>${c.life}</div>` : `<div>코스트</div><div>${c.cost ?? '-'}</div>`}<div>파워</div><div>${c.power ?? '-'}</div><div>카운터</div><div>${c.counter ? '+' + c.counter : '없음'}</div><div>특징</div><div>${c.traits.map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div><div>속성</div><div>${esc(c.attr.join(', ') || '-')}</div></div>
-      <h2>카드 원문</h2><div class="orig">${txt.trim() ? highlightText(txt) : '<span class="mut">효과 없음 (바닐라 카드)</span>'}</div>
+      ${cardCaution(c.base)?`<aside class="verified-caution"><b>연습판에서 주의</b><p>${esc(cardCaution(c.base))}</p></aside>`:''}
+      <details class="card-original"><summary>카드 원문 보기</summary><div class="orig">${txt.trim() ? highlightText(txt) : '<span class="mut">효과 없음 (바닐라 카드)</span>'}</div></details>
       ${ex.keywords?.length ? `<h2>키워드</h2>${ex.keywords.map(k => `<div class="ab"><b class="kwh">【${esc(String(k.name).replace(/[【】\[\]]/g, ''))}】</b> ${esc(k.text)}</div>`).join('')}` : ''}
       ${ex.abilities?.length ? `<h2>쉽게 풀어보기</h2>${ex.abilities.map((a, k) => `<div class="ab"><div class="sent">${glossify(easySentence(a.sentence), db.glossary)}</div>${a.steps.map(s => `<div class="step"><div class="l">${esc(s.label)}</div><div>${glossify(easySentence(s.text), db.glossary)}</div></div>`).join('')}${a.manual ? '<div class="warn">이 부분은 자동 판정을 지원하지 않아 대전에서 적용되지 않을 수 있어요</div>' : ''}</div>`).join('')}` : ''}
       ${(() => { const e2 = E.effectsOf(db, no); const tips = [...new Set(e2.abilities.flatMap(a => tipsFor(a, [])).concat(tipsFor(null, e2.keywords || [])))]; return tips.length ? `<h2>왜 중요해요?</h2>${tips.map(t => `<div class="step"><div class="l">팁</div><div>${esc(t)}</div></div>`).join('')}` : ''; })()}
@@ -274,7 +268,7 @@ function deckLegal(d) { return d.krLegal !== false; }
 function pageDecks(main) {
   setNav('decks');
   const cats = { recommended: '공식 추천', tournament: '대회 입상', starter: '스타트 덱' };
-  main.innerHTML = `<h1>덱</h1><div class="filters">${['', ...Object.keys(cats)].map(k => `<button class="${deckState.cat === k ? 'pri' : ''}" data-c="${k}">${k ? cats[k] : '전체'}</button>`).join('')}<label class="mut"><input type="checkbox" id="lg" ${deckState.legal ? 'checked' : ''}> 한글판으로 짤 수 있는 덱만</label></div><div class="tiles" id="dl"></div>`;
+  main.innerHTML = `<header class="catalog-head"><small>DECK REGISTER</small><h1>덱 목록</h1><p>좋아하는 리더를 골라 덱 구성과 플레이 순서를 살펴봐.</p></header><div class="filters">${['', ...Object.keys(cats)].map(k => `<button class="${deckState.cat === k ? 'pri' : ''}" data-c="${k}">${k ? cats[k] : '전체'}</button>`).join('')}<label class="mut"><input type="checkbox" id="lg" ${deckState.legal ? 'checked' : ''}> 한글판으로 짤 수 있는 덱만</label></div><div class="tiles" id="dl"></div>`;
   main.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { deckState.cat = b.dataset.c; pageDecks(main); });
   $('#lg').onchange = e => { deckState.legal = e.target.checked; pageDecks(main); };
   const list = db.decks.filter(d => (!deckState.cat || d.category === deckState.cat) && (!deckState.legal || deckLegal(d)));
@@ -332,21 +326,21 @@ export function getDeck(v) { if (!v) return null; if (v.startsWith('auto:')) ret
 function defaultDeckId(i = 0) { const ds = db.decks.filter(d => deckLegal(d)); return ds.length ? ds[i % ds.length].id : 'auto:' + (db.bases.filter(c => c.type === 'leader')[i]?.no); }
 function pagePlay(main, arg) {
   setNav('play');
-  main.innerHTML = `<section class="arena-lobby"><header class="arena-heading"><div><small>ODDLYS CARD ACADEMY</small><h1>연습 대전 <span>AI</span></h1></div><span class="arena-edition">오들리즈 비공식 연습장</span></header><div class="arena-versus" aria-label="오늘의 리더 대진"><div id="captain-0" class="captain"></div><b class="arena-vs" aria-hidden="true">VS</b><div id="captain-1" class="captain rival"></div></div><div class="filters arena-controls">
+  main.innerHTML = `<section class="arena-lobby"><header class="arena-heading"><div><small>ODDLYS CARD ACADEMY</small><h1>리더 대결! <span>AI 연습 대전</span></h1></div><span class="arena-edition">오들리즈 비공식 연습장</span></header><div class="arena-versus" aria-label="오늘의 리더 대진"><div id="captain-0" class="captain"></div><b class="arena-vs" aria-hidden="true">VS</b><div id="captain-1" class="captain rival"></div></div><div class="comic-brief"><b>코치</b><span>함께할 리더를 골라. 준비되면 첫 패 5장을 확인해!</span></div><div class="filters arena-controls">
     <label>내 덱 <select id="d0" style="max-width:300px">${deckOptions(arg || defaultDeckId(0))}</select></label>
     <label>AI 덱 <select id="d1" style="max-width:300px">${deckOptions(defaultDeckId(1))}</select></label>
     <label>상대 난이도 <select id="opponent-level"><option value="tactical">실전 AI</option><option value="basic">입문 AI</option></select></label>
     <button class="pri" id="go">첫 패 5장 보기</button></div></section>
-    <div id="order-note" role="status"></div><div id="bd"><section class="intro"><h2>첫 턴은 이렇게 시작해</h2>
+    <div id="order-note" role="status"></div><div id="bd"><section class="intro"><details class="opening-notes"><summary>처음이라면? 시작 순서와 첫 턴 규칙</summary>
     <p>이 연습전에서는 내 첫 패 5장을 먼저 보고 가위바위보를 해. 이긴 사람이 선후공을 정한 뒤, 처음 본 패를 그대로 쓰거나 한 번 전부 바꿀 수 있어. 공식 대전에서는 선후공을 먼저 정해.</p>
-    <p>턴 드로우와 두웅!!은 게임이 알아서 처리해. 선공 첫 턴에는 카드를 뽑지 않고 두웅!! 1장만 받아. 낼 카드가 없으면 <b>턴 종료</b>를 눌러. 양쪽 모두 자기 첫 턴에는 어택할 수 없어.</p><p><b>AI 효과는 읽고 넘어가.</b> 상대 카드가 효과를 쓰면 해설에서 무엇이 바뀌는지 확인하고 <b>읽었어 · 계속</b>을 눌러.</p><a href="#/lesson/l2-turn">두웅!!으로 카드 내기부터 연습하기</a></section></div>`;
+    <p>턴 드로우와 두웅!!은 게임이 알아서 처리해. 선공 첫 턴에는 카드를 뽑지 않고 두웅!! 1장만 받아. 낼 카드가 없으면 <b>턴 종료</b>를 눌러. 양쪽 모두 자기 첫 턴에는 어택할 수 없어.</p><p><b>AI 효과는 읽고 넘어가.</b> 상대 카드가 효과를 쓰면 해설에서 무엇이 바뀌는지 확인하고 <b>읽었어 · 계속</b>을 눌러.</p><a href="#/lesson/l2-turn">두웅!!으로 카드 내기부터 연습하기</a></details></section></div>`;
   const level=$('#opponent-level'); level.value=localStorage.getItem('practice-level')==='basic'?'basic':'tactical';
   level.onchange=()=>localStorage.setItem('practice-level',level.value);
   if (!arg) $('#d1').selectedIndex = Math.min(1, $('#d1').options.length - 1);
   function drawCaptain(p) {
     const d=getDeck($('#d'+p).value), c=db.cards.get(d?.leader), slot=$('#captain-'+p);if(!c)return;
-    slot.innerHTML='<img class="captain-art" alt=""><div class="captain-id"><small></small><h2></h2><p></p></div>';
-    slot.querySelector('img').src=imgBig(c);slot.querySelector('small').textContent=p?'02 / 상대 리더':'01 / 내 리더';slot.querySelector('h2').textContent=c.name;
+    slot.innerHTML='<div class="captain-cut" aria-hidden="true"><img alt=""></div><img class="captain-art" alt=""><div class="captain-id"><small></small><h2></h2><p></p></div>';
+    slot.querySelectorAll('img').forEach(im=>im.src=imgBig(c));slot.querySelector('small').textContent=p?'02 / 상대 리더':'01 / 내 리더';slot.querySelector('h2').textContent=c.name;
     slot.querySelector('p').textContent=c.no+'  ·  라이프 '+c.life;
   }
   for(const p of [0,1]) {drawCaptain(p);$('#d'+p).addEventListener('change',()=>drawCaptain(p));}
@@ -357,7 +351,7 @@ function pagePlay(main, arg) {
     const tactical = level.value === 'tactical';
     const ds = [getDeck($('#d0').value),getDeck($('#d1').value)];
     const G = E.createGame({decks:ds,names:['나','AI'],previewFirstHand:true,ai:[false,!tactical],sandbox:false},db);
-    const handPanel=document.createElement('section');handPanel.className='prehand intro';handPanel.innerHTML='<small>연습전 전용 시작 순서</small><h2>내 첫 패 5장</h2><div class="prehand-list"></div><p>카드를 누르면 크게 볼 수 있어. 가위바위보 뒤에도 이 패가 유지돼.</p>';
+    const handPanel=document.createElement('section');handPanel.className='prehand intro';handPanel.innerHTML='<div class="hand-intro"><small>첫 번째 장면 · 연습전</small><h2>내 첫 패 5장</h2><b class="hand-bubble">궁금한 카드를 눌러 봐!</b></div><div class="prehand-list"></div><p>카드를 누르면 크게 볼 수 있어. 가위바위보 뒤에도 이 패가 유지돼.</p>';
     for(const uid of G.players[0].hand){const c=db.cards.get(G.cards[uid].no);const b=document.createElement('button');b.type='button';b.dataset.uid=uid;b.innerHTML='<img alt=""><span></span>';b.querySelector('img').src=imgBig(c);b.querySelector('span').textContent=c.name;b.onclick=()=>showCard(c.no);handPanel.querySelector('.prehand-list').append(b);}
     ui.hidden = true; ui.style.display='none'; $('#order-note').textContent='';
     const again = () => { match?.stop(); board?.destroy(); pagePlay(main,arg); };
@@ -415,7 +409,8 @@ function pageRules(main) {
 function pageLearn(main) {
   setNav('learn');
   const done = JSON.parse(localStorage.getItem('lessonsDone') || '{}');
-  main.innerHTML = `<h1>튜토리얼</h1><p class="mut">순서대로 하면 기초 규칙 → 카드 효과 읽는 법 → 실전 판단까지 익힐 수 있어요.</p>
+  const upcoming=db.lessons.find(l=>!done[l.id])||db.lessons[0];
+  main.innerHTML = `<header class="learn-banner"><img src="${imgBig(db.cards.get('ST01-001'))}" alt=""><div><small>ODDLYS · 카드 교실</small><h1>튜토리얼</h1><p>코치와 한 수씩 연습해 봐.</p>${upcoming?`<a href="#/lesson/${encodeURIComponent(upcoming.id)}">${done[upcoming.id]?'복습':'이번 레슨'}: ${esc(upcoming.title)} →</a>`:''}</div></header>
     <div class="tiles lessons">${db.lessons.map((l, k) => `<a class="tile" href="#/lesson/${encodeURIComponent(l.id)}"><div class="no">레슨 ${k + 1} ${done[l.id] ? '· 완료' : ''}</div><h3>${esc(l.title)}</h3><div class="mut">${esc(l.summary || '')}</div></a>`).join('') || '<p class="mut">레슨 준비 중</p>'}</div>`;
 }
 function pageLesson(main, id) {
@@ -430,6 +425,8 @@ function pageLesson(main, id) {
     const last = si === L.steps.length - 1;
     const waiting = step.wait && step.wait !== 'next';
     coach.innerHTML = `<div class="who">코치 · ${si + 1}/${L.steps.length}</div><div>${esc(step.say).replace(/\n/g, '<br>')}</div><div class="bt"><button class="ghost rs">이 장면 다시 시작</button>${waiting ? '<span class="mut" style="font-size:12px">직접 해보세요</span>' : ''}${step.wait === 'next' || !step.wait ? `<button class="pri nx">${last ? '레슨 완료' : '다음'}</button>` : ''}</div>`;
+    const leader=G?.cards[G.players[0].leader]?.no;
+    if(leader){const portrait=document.createElement('img');portrait.className='guide-portrait';portrait.src=imgBig(db.cards.get(leader));portrait.alt='';coach.prepend(portrait);}
     const q=step.check;
     if(q) {
       const choices=document.createElement('div'); choices.className='filters'; choices.setAttribute('aria-label','예상 장수');
@@ -502,7 +499,7 @@ const PEER_PREFIX = 'oddlys-opcg-rps1-';
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] };
 function loadPeer() {
   if (window.Peer) return Promise.resolve();
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261922'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611262018'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
 }
 function pageOnline(main) {
   setNav('online');

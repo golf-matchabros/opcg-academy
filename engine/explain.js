@@ -94,6 +94,7 @@ export function condText(c) {
   if (c.raw) return `"${c.raw}" (직접 확인해요)`;
   const k = Object.keys(c)[0], v = c[k];
   const m = {
+    ownTurnAtLeast: () => `내 ${v}번째 턴부터`,
     leaderTrait: () => `내 리더가 《${v}》 특징을 가졌을 때`,
     leaderTraitAny: () => `내 리더가 ${v.map(x => `《${x}》`).join(' 또는 ')} 특징을 가졌을 때`,
     leaderTraitContains: () => `내 리더의 특징에 '${v}'가 들어갈 때`,
@@ -149,6 +150,7 @@ export function actionText(a) {
     case 'toDeckBottom': s = `${josa(tt, '을', '를')} 주인의 덱 맨 아래로 보내요`; break;
     case 'toDeckTop': s = `${josa(tt, '을', '를')} 주인의 덱 맨 위로 보내요`; break;
     case 'toTrash': s = `${josa(tt, '을', '를')} 트래시에 놓아요`; break;
+    case 'startingDonDeck': return `게임을 시작할 때 내 두웅!! 덱은 ${a.n}장이에요`;
     case 'addDon': s = `두웅!! 덱에서 두웅!!을 ${a.upTo ? '최대 ' : ''}${a.n}장 ${a.state === 'active' ? '세운(액티브) 상태로' : '눕힌(레스트) 상태로'} 가져와요`; break;
     case 'returnDon': s = `내 필드의 두웅!! ${a.n}장을 두웅!! 덱으로 되돌려요`; break;
     case 'restDon': s = a.side === 'opp' ? `상대의 두웅!! ${a.upTo ? '최대 ' : ''}${a.n}장을 레스트해요` : `내 코스트 에리어의 두웅!! ${a.n}장을 레스트(눕힘)해요`; break;
