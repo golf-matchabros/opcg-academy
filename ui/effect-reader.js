@@ -1,6 +1,6 @@
-import { effectsOf } from '../engine/core.js?v=202611261918';
-import { explainAbility, explainKeyword } from '../engine/explain.js?v=202611261918';
-import { easySentence } from './easy.js?v=202611261918';
+import { effectsOf } from '../engine/core.js?v=202611261922';
+import { explainAbility, explainKeyword } from '../engine/explain.js?v=202611261922';
+import { easySentence } from './easy.js?v=202611261922';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short = (s, n = 100) => s.length > n ? s.slice(0, n - 1) + '…' : s;

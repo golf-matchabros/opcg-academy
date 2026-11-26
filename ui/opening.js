@@ -1,9 +1,9 @@
-import { HANDS } from '../engine/opening.js?v=202611261918';
+import { HANDS } from '../engine/opening.js?v=202611261922';
 const labels = {rock:'바위', paper:'보', scissors:'가위'};
 export function drawOpening(root, v, me, send) {
   const other = 1-me;
   const result = v.last ? `나: ${labels[v.last[me]]} · 상대: ${labels[v.last[other]]}` : '';
-  root.innerHTML = `<section class="intro opening" aria-live="polite"><small class="mut">대전 준비 · 첫 패를 받기 전</small><div class="opening-leads mut"></div><h2></h2><p></p><div class="filters"></div></section>`;
+  root.innerHTML = `<section class="intro opening" aria-live="polite"><small class="mut">대전 준비 · ${v.handReviewed ? '첫 패 확인 완료' : '첫 패를 받기 전'}</small><div class="opening-leads mut"></div><h2></h2><p></p><div class="filters"></div></section>`;
   const h = root.querySelector('h2'), p = root.querySelector('p'), actions = root.querySelector('.filters');
   if (v.leaders?.length === 2) root.querySelector('.opening-leads').textContent = `내 리더: ${v.leaders[me]} · 상대 리더: ${v.leaders[other]}`;
   function button(text,a) { const b = document.createElement('button'); b.type='button'; b.className='pri'; b.textContent=text; b.style.minHeight='44px'; b.onclick=()=>{ for (const child of actions.children) child.disabled=true; send({...a,round:v.round}); }; actions.append(b); }

@@ -40,7 +40,7 @@ export function expandDeck(deck) {
   for (const { no, count } of deck.cards) for (let i = 0; i < count; i++) list.push(no);
   return list;
 }
-export function createGame({ decks, names = ['나', '상대'], seed = Date.now() % 2147483647, first = 0, orderChooser = first, ai = [false, true], sandbox = false }, db) {
+export function createGame({ decks, names = ['나', '상대'], seed = Date.now() % 2147483647, first = 0, orderChooser = first, previewFirstHand = false, ai = [false, true], sandbox = false }, db) {
   const G = {
     v: 1, seed, rngState: seed, turn: 0, active: first, first, phase: 'mulligan', winner: null, loseReason: null,
     players: [], cards: {}, nextUid: 1, mods: [], used: {}, queue: [], pending: null, battle: null,
@@ -56,6 +56,17 @@ export function createGame({ decks, names = ['나', '상대'], seed = Date.now()
     if ((leader?.base || d.leader) === 'OP15-058') P.donDeck = 6;
     P.deck = shuffle(G, expandDeck(d).map(no => mk(G, no, p)));
   }
+  if(previewFirstHand){
+    for(let p=0;p<2;p++)drawN(G,db,p,5,true);
+    G.events=[]; G.phase='practiceOpening'; G.practiceDealt=true; return G;
+  }
+  return setOpeningOrder(G,db,first,orderChooser);
+}
+export function finishPracticeOpening(G,db,first,winner){
+  if(G.phase!=='practiceOpening'||!G.practiceDealt||![0,1].includes(first)||![0,1].includes(winner))throw Error('첫 패 확인 단계가 아니에요');
+  G.phase='mulligan'; G.first=G.active=first; return setOpeningOrder(G,db,first,winner);
+}
+function setOpeningOrder(G,db,first,orderChooser){
   // Q973/974: order chooser (not necessarily the first player) resolves Im first.
   if (orderChooser !== 0 && orderChooser !== 1) throw Error('선후공을 결정한 플레이어가 올바르지 않아요');
   G.imSetup = [orderChooser, opp(orderChooser)].filter(p => leaderBaseNo(G, db, p) === 'OP13-079');
@@ -78,7 +89,8 @@ function nextImOrDeal(G, db) {
     return;
   }
   delete G.imSetup;
-  for (let p = 0; p < 2; p++) drawN(G, db, p, 5, true);
+  if(!G.practiceDealt) for (let p = 0; p < 2; p++) drawN(G, db, p, 5, true);
+  delete G.practiceDealt;
   G.pending = { type: 'mulligan', p: G.first, text: '첫 패 5장을 다시 뽑을까요? (한 번만 가능)' };
 }
 // 레슨/효과 시연용: 정해진 장면으로 게임 생성
