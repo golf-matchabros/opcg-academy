@@ -1,6 +1,6 @@
 // Local practice opponent. No rollout of the real game, private decklist, RNG,
 // event history or opponent hand. All policy/engine queries use this allowlist.
-import * as E from './core.js?v=202611261856';
+import * as E from './core.js?v=202611261902';
 
 function observation(g, p) {
   const cards = Object.create(null), q = g.pending;
@@ -15,13 +15,14 @@ function observation(g, p) {
   // Only cards explicitly shown by the engine to this chooser. No iteration of either library.
   if (q?.type === 'search') q.options.forEach(reveal);
   if (q?.type === 'trigger') reveal(q.uid);
-  if (q?.type === 'target') for (const u of q.options) if (g.cards[u]?.owner === p) reveal(u);
-  const item = q && g.queue[0]; // only prompt's public ability definition, never its saved selections/looked cards
+  const item = q && g.queue[0];
+  if (q?.type === 'target' && item?.ctx?.p === p && item.a?.do === 'play' && item.a.from === 'deckTop') q.options.forEach(reveal);
+   // only prompt's public ability definition, never its saved selections/looked cards
   return { players, cards, turn:g.turn, first:g.first, active:g.active, phase:g.phase, sandbox:false,
     mods:g.mods, used:g.used, battle:g.battle, pending:q,
     queue:item ? [{ a:item.a, ab:item.ab, isCost:item.isCost }] : [] };
 }
-  function fallback(q) {
+function fallback(q) {
     if (!q) return {type:'endTurn'};
     switch(q.type){
       case 'mulligan':return {type:'mulligan',redraw:false};

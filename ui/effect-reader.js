@@ -1,6 +1,6 @@
-import { effectsOf } from '../engine/core.js?v=202611261856';
-import { explainAbility, explainKeyword } from '../engine/explain.js?v=202611261856';
-import { easySentence } from './easy.js?v=202611261856';
+import { effectsOf } from '../engine/core.js?v=202611261902';
+import { explainAbility, explainKeyword } from '../engine/explain.js?v=202611261902';
+import { easySentence } from './easy.js?v=202611261902';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short = (s, n = 100) => s.length > n ? s.slice(0, n - 1) + '…' : s;
@@ -51,7 +51,10 @@ export function collectEffects(events, b, previous = []) {
     const e = events[k], i = b.G.cards[e.uid], p = e.p ?? i?.owner;
     const kind = e.t === 'ability' ? e.timing : e.t;
     const paired = ['trigger','event'].includes(e.t) && events.slice(k+1).some(x => x.t === 'ability' && x.uid === e.uid && x.timing === (e.t === 'trigger' ? 'trigger' : 'counter'));
-    const fallback = !paired && (e.t === 'trigger' || e.t === 'event' && b.G.battle && b.G.battle.p !== p);
+    // The engine may ask the AI whether to use an optional ability in a later action.
+    // In that case its actual 'ability' event is still queued, not a second activation.
+    const queued = b.G.queue?.some(item => item.sys === 'abilityStart' && item.ctx?.src === e.uid && item.ab?.timing === (e.t === 'trigger' ? 'trigger' : 'counter'));
+    const fallback = !paired && !queued && (e.t === 'trigger' || e.t === 'event' && b.G.battle && b.G.battle.p !== p);
     if (e.t === 'ability' || e.t === 'counter' || fallback || (e.t === 'manual' && !e.by && !starts.size)) {
       const no = e.no || i?.no, c = no && b.C(no), timing = e.t === 'event' ? 'counter' : kind;
       const abs = no ? effectsOf(b.db, no).abilities : [];
@@ -70,12 +73,17 @@ export function collectEffects(events, b, previous = []) {
       const change = observed(e,b,events); if (change) r.actual.push(change);
     }
   }
+  const next = b.G.queue?.[0], pending = b.G.pending;
+  const waitingSource = pending?.src || next?.ctx?.src;
+  for (const r of linked.values()) {
+    r.awaiting = pending && waitingSource === r.uid ? side(pending.p,b.me) + ' 선택을 기다리고 있어요.' : '';
+  }
   return starts;
 }
 
 const actualText = r => {
   const counts = new Map(); for (const s of r.actual) counts.set(s,(counts.get(s)||0)+1);
-  return [...counts].map(([s,n]) => s + (n>1 ? ` ×${n}` : '')).join(' · ') || '이 효과에 연결된 변화 기록이 아직 없어요.';
+  return [...counts].map(([s,n]) => s + (n>1 ? ` ×${n}` : '')).join(' · ') || r.awaiting || '이 효과에 연결된 변화 기록이 없어요.';
 };
 
 export class EffectReader {

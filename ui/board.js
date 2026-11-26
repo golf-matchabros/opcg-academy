@@ -1,10 +1,10 @@
 // 대전 보드 UI: 상태 렌더 + 클릭 조작 + 효과 연출(이동/파워/어택 화살표/효과 해설 배너)
-import * as E from '../engine/core.js?v=202611261856';
-import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261856';
-import { easySentence, glossify } from './easy.js?v=202611261856';
-import { evalPlay, roleOf } from './coach.js?v=202611261856';
-import { EffectReader, collectEffects } from './effect-reader.js?v=202611261856';
-import { donArea, attachedDon } from './don.js?v=202611261856';
+import * as E from '../engine/core.js?v=202611261902';
+import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261902';
+import { easySentence, glossify } from './easy.js?v=202611261902';
+import { evalPlay, roleOf } from './coach.js?v=202611261902';
+import { EffectReader, collectEffects } from './effect-reader.js?v=202611261902';
+import { donArea, attachedDon } from './don.js?v=202611261902';
 
 const KW_LABEL = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐)', doubleAttack: '더블', banish: '배니시', unblockable: '블록불가' };
 const KW_TIP = { blocker: '블로커: 상대가 어택하면 이 캐릭터를 눕혀서 대신 막을 수 있어요', rush: '속공: 나온 턴에 바로 어택할 수 있어요', rushCharacter: '속공(캐릭터): 나온 턴에 상대 캐릭터만 어택할 수 있어요', doubleAttack: '더블 어택: 리더를 맞히면 라이프 2장', banish: '배니시: 맞은 라이프가 트래시로 (트리거 불가)', unblockable: '블록 불가: 블로커로 막을 수 없어요' };
@@ -13,7 +13,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const firstPersonalTurn = (G, p) => (G.players[p].turnsTaken ?? (G.turn <= 2 ? 1 : 2)) === 1;
-const IMGV = 'c2';
+const IMGV = 'official-sample-1';
 export function imgSrc(c) { return c ? `${c.thumb || c.img}?v=${IMGV}` : ''; }
 export function imgBig(c) { return c ? `img/m/${c.no}.webp?v=${IMGV}` : ''; }
 export function imgFallback(el, c) { el.onerror = () => { el.onerror = null; if (c && c.src) el.src = c.src; }; }
@@ -25,7 +25,7 @@ export class Board {
     this.G = null; this.sel = null; this.picks = []; this.rects = {}; this.busy = false; this.sending = false; this.revision = 0; this.destroyed = false;
     if (this.o.assist === undefined) this.o.assist = localStorage.getItem('assist') !== '0';
     if (this.o.coach === undefined) this.o.coach = true;
-    root.innerHTML = `<div class="play-wrap"><div class="board"></div><aside class="panel"><section class="effect-reader" aria-label="효과 읽기"></section><div class="assist"></div><div class="preview" style="display:none"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="sizebar">카드 크기 <button data-sz="s">작게</button><button data-sz="m">보통</button><button data-sz="l">크게</button></div><div class="sizebar">확대 보기 <button class="zm">${localStorage.getItem('zoom') === '0' ? '꺼짐' : '켜짐'}</button></div><button class="ghost as">초보 도우미: ${this.o.assist ? '켜짐' : '꺼짐'}</button><button class="ghost sp">연출 속도: 보통</button><button class="ghost lg">로그 지우기</button></div><div class="log"></div></aside></div>`;
+    root.innerHTML = `<div class="play-wrap"><div class="board"></div><aside class="panel"><section class="effect-reader" aria-label="효과 읽기"></section><div class="assist"></div><div class="preview" style="display:none"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="sizebar">카드 크기 <button data-sz="s">작게</button><button data-sz="m">보통</button><button data-sz="l">크게</button></div><div class="sizebar">확대 보기 <button class="zm">${localStorage.getItem('zoom') === '0' ? '꺼짐' : '켜짐'}</button></div><button class="ghost as">초보 도우미: ${this.o.assist ? '켜짐' : '꺼짐'}</button><button class="ghost sp">연출 속도: 보통</button><button class="ghost lg">로그 지우기</button></div><details class="match-log"><summary>대전 로그</summary><div class="log"></div></details></aside></div>`;
     this.el = root.querySelector('.board');
     this.asEl = root.querySelector('.assist'); this.pvEl = root.querySelector('.preview');
     root.querySelector('.as').onclick = (e) => { this.o.assist = !this.o.assist; localStorage.setItem('assist', this.o.assist ? '1' : '0'); e.target.textContent = '초보 도우미: ' + (this.o.assist ? '켜짐' : '꺼짐'); this.render(); };
@@ -405,8 +405,9 @@ export class Board {
   }
   async animate(events, revision) {
     const stopped = () => this.destroyed || this.reader.closed || revision !== this.revision;
+    const wasAwaiting = this.reader.records[0]?.awaiting;
     const records = collectEffects(events, this, this.reader.records);
-    if (!records.size && events.some(e => e.by) && this.reader.records.length) this.reader.paint();
+    if (!records.size && this.reader.records.length && (wasAwaiting !== this.reader.records[0].awaiting || events.some(e => e.by))) this.reader.paint();
     const sp = this.o.speed;
     // 1) 이동 (FLIP 고스트)
     const moves = events.filter(e => e.t === 'move' || e.t === 'draw');
