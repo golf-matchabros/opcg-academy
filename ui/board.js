@@ -1,7 +1,7 @@
 // 대전 보드 UI: 상태 렌더 + 클릭 조작 + 효과 연출(이동/파워/어택 화살표/효과 해설 배너)
-import * as E from '../engine/core.js?v=202611261712';
-import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261712';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261712';
+import * as E from '../engine/core.js?v=202611261741';
+import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261741';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611261741';
 
 const KW_LABEL = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐)', doubleAttack: '더블', banish: '배니시', unblockable: '블록불가' };
 const KW_TIP = { blocker: '블로커: 상대가 어택하면 이 캐릭터를 눕혀서 대신 막을 수 있어요', rush: '속공: 나온 턴에 바로 어택할 수 있어요', rushCharacter: '속공(캐릭터): 나온 턴에 상대 캐릭터만 어택할 수 있어요', doubleAttack: '더블 어택: 리더를 맞히면 라이프 2장', banish: '배니시: 맞은 라이프가 트래시로 (트리거 불가)', unblockable: '블록 불가: 블로커로 막을 수 없어요' };
@@ -9,9 +9,9 @@ const PHASE = { mulligan: '멀리건', refresh: '리프레시', draw: '드로우
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function imgSrc(c) { return c ? (c.thumb || c.img) : ''; }
-const FULL_LOCAL = typeof location !== 'undefined' && location.port === '8787';
-export function imgBig(c) { return c ? (FULL_LOCAL ? c.img : (c.src || c.img)) : ''; }
+const IMGV = 'c1';
+export function imgSrc(c) { return c ? `${c.thumb || c.img}?v=${IMGV}` : ''; }
+export function imgBig(c) { return c ? `img/m/${c.no}.webp?v=${IMGV}` : ''; }
 export function imgFallback(el, c) { el.onerror = () => { el.onerror = null; if (c && c.src) el.src = c.src; }; }
 
 export class Board {

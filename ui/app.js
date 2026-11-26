@@ -1,9 +1,9 @@
 // 앱: 라우터 + 카드 사전 + 덱 + 연습 대전 + 효과 시연 + 튜토리얼 + 온라인 대전
-import * as E from '../engine/core.js?v=202611261712';
-import { explainCard } from '../engine/explain.js?v=202611261712';
-import { validateDeck } from '../engine/rules.js?v=202611261712';
-import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261712';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261712';
+import * as E from '../engine/core.js?v=202611261741';
+import { explainCard } from '../engine/explain.js?v=202611261741';
+import { validateDeck } from '../engine/rules.js?v=202611261741';
+import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261741';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611261741';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -17,7 +17,7 @@ let current = null; // 현재 화면 정리 함수
 
 async function boot() {
   const [cards, effects, decks, glossary, reg, lessons] = await Promise.all([
-    getJSON('data/cards.json?v=202611261712', []), getJSON('data/effects.json?v=202611261712', {}), getJSON('data/decks.json?v=202611261712', []), getJSON('data/glossary.json?v=202611261712', {}), getJSON('data/regulation.json?v=202611261712', {}), getJSON('data/lessons.json?v=202611261712', []),
+    getJSON('data/cards.json?v=202611261741', []), getJSON('data/effects.json?v=202611261741', {}), getJSON('data/decks.json?v=202611261741', []), getJSON('data/glossary.json?v=202611261741', {}), getJSON('data/regulation.json?v=202611261741', {}), getJSON('data/lessons.json?v=202611261741', []),
   ]);
   const ord = c => { const m = c.no.match(/^([A-Z]+)(\d+)-(\d+)/); if (!m) return [9, 0, 0]; const t = { OP: 0, EB: 1, ST: 2, PRB: 3, P: 4 }[m[1]] ?? 5; return [t, -(+m[2]), +m[3]]; };
   cards.sort((a, b) => { const x = ord(a), y = ord(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.no.localeCompare(b.no); });
@@ -447,7 +447,7 @@ const PEER_PREFIX = 'oddlys-opcg-academy-';
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] };
 function loadPeer() {
   if (window.Peer) return Promise.resolve();
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261712'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261741'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
 }
 function pageOnline(main) {
   setNav('online');
