@@ -1,7 +1,7 @@
 // 대전 보드 UI: 상태 렌더 + 클릭 조작 + 효과 연출(이동/파워/어택 화살표/효과 해설 배너)
-import * as E from '../engine/core.js';
-import { explainAbility, actionText, explainCard } from '../engine/explain.js';
-import { easySentence, glossify, tipsFor } from './easy.js';
+import * as E from '../engine/core.js?v=202611261712';
+import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261712';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611261712';
 
 const KW_LABEL = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐)', doubleAttack: '더블', banish: '배니시', unblockable: '블록불가' };
 const KW_TIP = { blocker: '블로커: 상대가 어택하면 이 캐릭터를 눕혀서 대신 막을 수 있어요', rush: '속공: 나온 턴에 바로 어택할 수 있어요', rushCharacter: '속공(캐릭터): 나온 턴에 상대 캐릭터만 어택할 수 있어요', doubleAttack: '더블 어택: 리더를 맞히면 라이프 2장', banish: '배니시: 맞은 라이프가 트래시로 (트리거 불가)', unblockable: '블록 불가: 블로커로 막을 수 없어요' };
