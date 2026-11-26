@@ -1,7 +1,8 @@
 // 대전 보드 UI: 상태 렌더 + 클릭 조작 + 효과 연출(이동/파워/어택 화살표/효과 해설 배너)
-import * as E from '../engine/core.js?v=202611261811';
-import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261811';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261811';
+import * as E from '../engine/core.js?v=202611261818';
+import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261818';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611261818';
+import { evalPlay, roleOf } from './coach.js?v=202611261818';
 
 const KW_LABEL = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐)', doubleAttack: '더블', banish: '배니시', unblockable: '블록불가' };
 const KW_TIP = { blocker: '블로커: 상대가 어택하면 이 캐릭터를 눕혀서 대신 막을 수 있어요', rush: '속공: 나온 턴에 바로 어택할 수 있어요', rushCharacter: '속공(캐릭터): 나온 턴에 상대 캐릭터만 어택할 수 있어요', doubleAttack: '더블 어택: 리더를 맞히면 라이프 2장', banish: '배니시: 맞은 라이프가 트래시로 (트리거 불가)', unblockable: '블록 불가: 블로커로 막을 수 없어요' };
@@ -139,20 +140,37 @@ export class Board {
       const C = JSON.parse(JSON.stringify(G)); C.ai = [true, true]; C.events = [];
       const nm = u => { const i = G.cards[u]; const c = i && !i.hidden ? this.C(i.no) : null; return c ? c.name : '카드'; };
       for (let k = 0; k < 8; k++) {
-        const a = E.aiTurnActions(C, db, me);
+        let a = E.aiTurnActions(C, db, me);
+        if (a.type === 'play') {
+          // 효과가 헛도는 카드보다 지금 효과가 나는 카드를 먼저 추천
+          const g = u => { try { return evalPlay(C, db, u, me).grade; } catch { return 'ok'; } };
+          if (g(a.uid) === 'meh') {
+            const L2 = E.legalMain(C, db, me);
+            const alt = L2.play.filter(u => u !== a.uid && g(u) === 'good').sort((x, y) => E.costOf(C, db, y) - E.costOf(C, db, x))[0];
+            if (alt) a = { type: 'play', uid: alt };
+          }
+        }
         if (a.type === 'endTurn') { this.plan.push({ a, text: '턴 종료' }); break; }
         let text = '';
         if (a.type === 'play') text = `「${nm(a.uid)}」 내기 (코스트 ${E.costOf(C, db, a.uid)})`;
         else if (a.type === 'attachDon') text = `「${nm(a.uid)}」에 두웅!! ${a.n}장 붙이기`;
         else if (a.type === 'attack') text = `「${nm(a.uid)}」로 ${a.target === C.players[1 - me].leader ? '상대 리더' : '「' + nm(a.target) + '」'} 어택`;
         else if (a.type === 'activate') text = `「${nm(a.uid)}」 효과 발동`;
-        this.plan.push({ a, text, uid: a.uid, target: a.target });
+        const prev = this.plan[this.plan.length - 1];
+        if (prev && a.type === 'attachDon' && prev.a.type === 'attachDon' && prev.uid === a.uid) { prev.n = (prev.n || prev.a.n) + a.n; prev.text = `「${nm(a.uid)}」에 두웅!! ${prev.n}장 붙이기`; }
+        else this.plan.push({ a, text, uid: a.uid, target: a.target });
         try { E.apply(C, db, me, a); } catch { break; }
         for (let j = 0; j < 20 && C.pending; j++) { const r = E.aiRespond(C, db, C.pending.p); if (!r) break; try { E.apply(C, db, C.pending.p, r); } catch { break; } }
         if (C.winner !== null) { this.plan.push({ a: { type: 'win' }, text: '이번 턴에 이길 수 있어요!' }); break; }
       }
     } catch (e) { console.warn('plan', e); }
     return this.plan;
+  }
+  evalOf(uid) {
+    const key = this._planKey + '|' + uid;
+    this._evc = this._evc || {};
+    if (!this._evc[key]) { try { this._evc[key] = evalPlay(this.G, this.db, uid, this.me); } catch (e) { this._evc[key] = { grade: 'ok', good: [], bad: [], info: [] }; } }
+    return this._evc[key];
   }
   coachTags(uid) {
     // 카드 위에 붙는 감독 표시 (연습 모드에서만)
@@ -163,7 +181,10 @@ export class Board {
     const num = steps.length ? `<div class="cnum">${steps.map(n => '①②③④⑤⑥⑦⑧'[n - 1]).join('')}</div>` : '';
     let tag = '';
     if (i.zone === 'hand') {
-      if (L.play.includes(uid)) tag = `<div class="ctag ok">낼 수 있어</div>`;
+      if (L.play.includes(uid)) {
+        const ev = this.evalOf(uid);
+        tag = ev.grade === 'good' ? `<div class="ctag ok">추천 · 효과 OK</div>` : ev.grade === 'meh' ? `<div class="ctag meh">낼 순 있지만 지금은 별로</div>` : `<div class="ctag ok">낼 수 있어</div>`;
+      }
       else if (c.type === 'event' && !E.effectsOf(this.db, c.no).abilities.some(a => a.timing === 'main')) tag = `<div class="ctag no">상대 턴에 써요</div>`;
       else if (E.costOf(G, this.db, uid) > P.donActive) tag = `<div class="ctag no">두웅!! ${E.costOf(G, this.db, uid) - P.donActive} 부족</div>`;
     } else {
@@ -183,7 +204,9 @@ export class Board {
     const br = this.el.getBoundingClientRect(), r = node.getBoundingClientRect();
     const verb = { play: '이걸 내봐!', attachDon: '여기에 두웅!!을 붙여봐!', attack: '이걸로 어택해봐!', activate: '이 효과를 써봐!', endTurn: '이제 턴을 끝내도 돼!', win: '이번 턴에 이길 수 있어!' }[step.a.type] || '';
     const d = document.createElement('div'); d.className = 'callout';
-    d.innerHTML = `<b>① ${verb}</b><div>${esc(step.text)}</div>${step.a.type !== 'endTurn' ? '<div class="mut" style="font-size:11px">카드를 눌러서 메뉴에서 고르면 돼요</div>' : ''}`;
+    let why = '';
+    if (step.a.type === 'play') { const ev = this.evalOf(step.uid); why = (ev.good[0] || ev.info[0] || ''); if (ev.grade === 'meh') why = (ev.bad[0] || '') + (ev.info.find(x => x.includes('의미')) ? ' · ' + ev.info.find(x => x.includes('의미')) : ''); }
+    d.innerHTML = `<b>① ${verb}</b><div>${esc(step.text)}</div>${why ? `<div class="cwhy">${esc(why)}</div>` : ''}${step.a.type !== 'endTurn' ? '<div class="mut" style="font-size:11px">카드를 눌러서 메뉴에서 고르면 돼요</div>' : ''}`;
     this.el.appendChild(d);
     const w = d.offsetWidth, h = d.offsetHeight;
     let left = r.left - br.left + r.width / 2 - w / 2; left = Math.max(6, Math.min(br.width - w - 6, left));
@@ -238,7 +261,11 @@ export class Board {
         else why = '더 할 게 없으면 <b>턴 종료</b>를 눌러요';
         h += `<div class="recline">추천: ${why}</div>`;
         if (this.o.coach && this.plan && this.plan.length > 1) h += `<div class="plan"><b>이번 턴 추천 순서</b>${this.plan.map((p, k) => `<div>${'①②③④⑤⑥⑦⑧'[k]} ${esc(p.text)}</div>`).join('')}</div>`;
-        h += `<div class="mut" style="font-size:11px">카드 위 초록 표시 = 지금 할 수 있는 것 · 빨간 표시 = 아직 못 하는 이유 · 동그라미 숫자 = 추천 순서</div>`;
+        if (this.o.coach) {
+          const rows = P.hand.filter(u => L.play.includes(u)).map(u => { const ev = this.evalOf(u); const c = this.cardOf(u); const r = ev.grade === 'meh' ? ev.bad[0] : (ev.good[0] || ev.info[0] || roleOf(db, c).role); return `<div class="hrow ${ev.grade}"><span class="g">${ev.grade === 'good' ? '추천' : ev.grade === 'meh' ? '별로' : '가능'}</span> <b>${esc(c.name)}</b> <span class="mut">${esc(r || '')}</span></div>`; });
+          if (rows.length) h += `<div class="plan"><b>지금 낼 수 있는 카드, 내면 어떨까?</b>${rows.join('')}</div>`;
+        }
+        h += `<div class="mut" style="font-size:11px">초록 = 추천/가능 · 노랑 = 낼 순 있지만 지금은 별로 · 빨강 = 못 내는 이유 · 숫자 = 추천 순서 · 카드에 마우스를 올리면 자세한 이유</div>`;
       }
     } catch (e) { console.warn(e); }
     this.asEl.innerHTML = h ? `<div class="assistbox">${h}</div>` : '';
@@ -254,7 +281,26 @@ export class Board {
     this.pvEl.innerHTML = `<div class="pvh"><img src="${imgSrc(c)}"><div><b>${esc(c.name)}</b><div class="mut" style="font-size:11px">${c.type === 'leader' ? '리더' : c.type === 'event' ? '이벤트' : c.type === 'stage' ? '스테이지' : '캐릭터'} · ${c.cost != null ? '코스트 ' + c.cost + ' · ' : ''}파워 ${c.power ?? '-'}${c.counter ? ' · 카운터 +' + c.counter : ''}</div></div></div>
       ${(ex?.keywords || []).map(k => `<div class="pvl"><b class="kwh">【${esc(String(k.name).replace(/[【】\[\]]/g, ''))}】</b> ${esc(k.text)}</div>`).join('')}
       ${(ex?.abilities || []).map(a => `<div class="pvl">${glossify(easySentence(a.sentence), g)}</div>`).join('') || (c.text ? '' : '<div class="pvl mut">효과 없는 카드예요. 파워와 코스트로 싸워요</div>')}
-      ${tips.length ? `<div class="pvtips">${tips.map(t => `<div>팁: ${esc(t)}</div>`).join('')}</div>` : ''}`;
+      ${tips.length ? `<div class="pvtips">${tips.map(t => `<div>팁: ${esc(t)}</div>`).join('')}</div>` : ''}
+      ${this.nowBox(uid, c)}`;
+  }
+  nowBox(uid, c) {
+    const G = this.G, i = G.cards[uid];
+    if (!this.o.coach || !i || i.owner !== this.me) return '';
+    const r = roleOf(this.db, c);
+    let h = `<div class="nowbox"><div class="mut">${esc(r.line)}</div>${r.role ? `<div>어떤 카드? ${esc(r.role)}</div>` : ''}`;
+    if (i.zone === 'hand' && this.isMyMain()) {
+      const L = this.legal || { play: [] };
+      if (!L.play.includes(uid)) {
+        const cost = E.costOf(G, this.db, uid), don = G.players[this.me].donActive;
+        h += `<div class="nb bad">지금은 못 내요: ${c.type === 'event' && !E.effectsOf(this.db, c.no).abilities.some(a => a.timing === 'main') ? '상대가 공격할 때(카운터) 쓰는 카드예요' : cost > don ? `두웅!!이 ${cost - don}장 모자라요` : '조건이 안 돼요'}</div>`;
+      } else {
+        const ev = this.evalOf(uid);
+        h += `<div class="nb ${ev.grade}">${ev.grade === 'good' ? '지금 내기 좋아요' : ev.grade === 'meh' ? '낼 순 있지만 지금은 별로예요' : '낼 수 있어요'}</div>`;
+        h += [...ev.good.map(x => `<div class="nl good">+ ${esc(x)}</div>`), ...ev.bad.map(x => `<div class="nl bad">- ${esc(x)}</div>`), ...ev.info.map(x => `<div class="nl">· ${esc(x)}</div>`)].join('');
+      }
+    }
+    return h + '</div>';
   }
   async pointer(fromUid, toUid, label, color, oldRect) {
     const na = this.el.querySelector(`[data-uid="${fromUid}"]`);

@@ -240,3 +240,15 @@ body.sz-l{--card-w:min(clamp(100px,9vw,200px),calc((100vh - 250px) / 5.7))}
 .intro{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 22px;max-width:820px;line-height:1.8;font-size:15px}
 .intro ol{padding-left:20px;margin:6px 0 10px}
 .card .cnum{font-size:clamp(15px,calc(var(--card-w) * .15),22px);padding:2px 9px;right:-12px}
+
+.ctag.meh{background:#ffcf5c;color:#2a1d00}
+.callout .cwhy{margin-top:3px;font-size:12px;font-weight:600;color:#2b0f57}
+.assistbox .hrow{font-size:12.5px;padding:2px 0}
+.assistbox .hrow .g{display:inline-block;min-width:34px;text-align:center;border-radius:6px;font-size:11px;font-weight:800;padding:0 5px}
+.assistbox .hrow.good .g{background:var(--good);color:#04170e}
+.assistbox .hrow.ok .g{background:#2b6b52;color:#d8ffe9}
+.assistbox .hrow.meh .g{background:#ffcf5c;color:#2a1d00}
+.nowbox{margin-top:8px;padding:8px;border-radius:8px;background:#0b1220;border:1px solid var(--line)}
+.nowbox .nb{font-weight:800;margin:4px 0}
+.nowbox .nb.good{color:var(--good)}.nowbox .nb.meh{color:#ffcf5c}.nowbox .nb.bad{color:#ff9aa5}.nowbox .nb.ok{color:#9fe8c4}
+.nowbox .nl{font-size:12px}.nowbox .nl.good{color:#9fe8c4}.nowbox .nl.bad{color:#ffb3bb}

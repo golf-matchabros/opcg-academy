@@ -398,7 +398,7 @@ function startAbility(G, db, item) {
   const steps = [...(ab.cost || []).map(a => ({ a, ctx, isCost: true })), ...(ab.steps || []).map(a => ({ a, ctx }))];
   pushFront(G, steps);
 }
-function canPay(G, db, cost, ctx) {
+export function canPay(G, db, cost, ctx) {
   const P = G.players[ctx.p];
   for (const a of cost) {
     if (a.do === 'restDon' && P.donActive < (a.n || 1)) return false;
