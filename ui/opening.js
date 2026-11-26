@@ -1,4 +1,4 @@
-import { HANDS } from '../engine/opening.js?v=202611261836';
+import { HANDS } from '../engine/opening.js?v=202611261846';
 const labels = {rock:'바위', paper:'보', scissors:'가위'};
 export function drawOpening(root, v, me, send) {
   const other = 1-me;

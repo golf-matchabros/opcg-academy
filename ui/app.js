@@ -1,11 +1,11 @@
 // 앱: 라우터 + 카드 사전 + 덱 + 연습 대전 + 효과 시연 + 튜토리얼 + 온라인 대전
-import * as E from '../engine/core.js?v=202611261836';
-import { newOpening, applyOpening, openingView, HANDS } from '../engine/opening.js?v=202611261836';
-import { drawOpening } from './opening.js?v=202611261836';
-import { explainCard } from '../engine/explain.js?v=202611261836';
-import { validateDeck } from '../engine/rules.js?v=202611261836';
-import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261836';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261836';
+import * as E from '../engine/core.js?v=202611261846';
+import { newOpening, applyOpening, openingView, HANDS } from '../engine/opening.js?v=202611261846';
+import { drawOpening } from './opening.js?v=202611261846';
+import { explainCard } from '../engine/explain.js?v=202611261846';
+import { validateDeck } from '../engine/rules.js?v=202611261846';
+import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261846';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611261846';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -20,7 +20,7 @@ let current = null; // 현재 화면 정리 함수
 
 async function boot() {
   const [cards, effects, decks, glossary, reg, lessons] = await Promise.all([
-    getJSON('data/cards.json?v=202611261836', []), getJSON('data/effects.json?v=202611261836', {}), getJSON('data/decks.json?v=202611261836', []), getJSON('data/glossary.json?v=202611261836', {}), getJSON('data/regulation.json?v=202611261836', {}), getJSON('data/lessons.json?v=202611261836', []),
+    getJSON('data/cards.json?v=202611261846', []), getJSON('data/effects.json?v=202611261846', {}), getJSON('data/decks.json?v=202611261846', []), getJSON('data/glossary.json?v=202611261846', {}), getJSON('data/regulation.json?v=202611261846', {}), getJSON('data/lessons.json?v=202611261846', []),
   ]);
   const ord = c => { const m = c.no.match(/^([A-Z]+)(\d+)-(\d+)/); if (!m) return [9, 0, 0]; const t = { OP: 0, EB: 1, ST: 2, PRB: 3, P: 4 }[m[1]] ?? 5; return [t, -(+m[2]), +m[3]]; };
   cards.sort((a, b) => { const x = ord(a), y = ord(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.no.localeCompare(b.no); });
@@ -337,7 +337,7 @@ function pagePlay(main, arg) {
     <button class="pri" id="go">가위바위보로 시작</button></div>
     <div id="order-note" role="status"></div><div id="bd"><section class="intro"><h2>첫 턴은 이렇게 시작해</h2>
     <p>가위바위보에서 이긴 사람이 선공이나 후공을 골라. 그다음 첫 패 5장을 보고, 그대로 시작하거나 딱 한 번 전부 바꿀 수 있어.</p>
-    <p>턴 드로우와 두웅!!은 게임이 알아서 처리해. 선공 첫 턴에는 카드를 뽑지 않고 두웅!! 1장만 받아. 낼 카드가 없으면 <b>턴 종료</b>를 눌러. 양쪽 모두 자기 첫 턴에는 어택할 수 없어.</p></section></div>`;
+    <p>턴 드로우와 두웅!!은 게임이 알아서 처리해. 선공 첫 턴에는 카드를 뽑지 않고 두웅!! 1장만 받아. 낼 카드가 없으면 <b>턴 종료</b>를 눌러. 양쪽 모두 자기 첫 턴에는 어택할 수 없어.</p><a href="#/lesson/l2-turn">두웅!!으로 카드 내기부터 연습하기</a></section></div>`;
   if (!arg) $('#d1').selectedIndex = Math.min(1, $('#d1').options.length - 1);
   let match, board;
   const start = () => {
@@ -405,14 +405,23 @@ function pageLesson(main, id) {
   const L = db.lessons.find(x => x.id === id); if (!L) { main.innerHTML = '레슨 없음'; return; }
   const k = db.lessons.indexOf(L);
   main.innerHTML = `<a href="#/learn" class="mut">← 레슨 목록</a><h1>레슨 ${k + 1}. ${esc(L.title)}</h1><div id="bd"></div>`;
-  let si = -1, board, match, coach, G, advancing = false;
+  let si = -1, board, match, coach, G, advancing = false, closed = false, advanceTimer;
   const say = (step) => {
     coach && coach.remove();
-    coach = document.createElement('div'); coach.className = 'coach';
+    coach = document.createElement('div'); coach.className = 'coach lesson-guide';
     const last = si === L.steps.length - 1;
     const waiting = step.wait && step.wait !== 'next';
     coach.innerHTML = `<div class="who">코치 · ${si + 1}/${L.steps.length}</div><div>${esc(step.say).replace(/\n/g, '<br>')}</div><div class="bt"><button class="ghost rs">이 장면 다시 시작</button>${waiting ? '<span class="mut" style="font-size:12px">직접 해보세요</span>' : ''}${step.wait === 'next' || !step.wait ? `<button class="pri nx">${last ? '레슨 완료' : '다음'}</button>` : ''}</div>`;
-    document.body.appendChild(coach);
+    const q=step.check;
+    if(q) {
+      const choices=document.createElement('div'); choices.className='filters'; choices.setAttribute('aria-label','예상 장수');
+      const feedback=document.createElement('div'); feedback.setAttribute('aria-live','polite');
+      const nextButton=coach.querySelector('.nx'); nextButton.textContent='예측 건너뛰기';
+      for(const [i,text] of q.options.entries()) {const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=()=>{feedback.textContent=i===q.answer?q.why:q.hint;
+        if(i===q.answer){choices.querySelectorAll('button').forEach(x=>x.disabled=true);nextButton.textContent='직접 해보기';}else b.disabled=true;};choices.append(b);}
+      const controls=coach.querySelector('.bt');coach.insertBefore(choices,controls);coach.insertBefore(feedback,controls);
+    }
+    main.insertBefore(coach,main.querySelector('#bd'));
     const nx = coach.querySelector('.nx'); if (nx) nx.onclick = () => next();
     coach.querySelector('.rs').onclick = () => { let k2 = si; while (k2 > 0 && !(L.steps[k2].scenario || L.steps[k2].game)) k2--; si = k2 - 1; advancing = false; next(); };
   };
@@ -440,21 +449,31 @@ function pageLesson(main, id) {
     return true;
   };
   const next = async () => {
-    si++;
+    if(closed) return; clearTimeout(advanceTimer); si++;
     if (si >= L.steps.length) { const d = JSON.parse(localStorage.getItem('lessonsDone') || '{}'); d[L.id] = 1; localStorage.setItem('lessonsDone', JSON.stringify(d)); coach && coach.remove(); const nl = db.lessons[k + 1]; main.insertAdjacentHTML('beforeend', `<div class="tile" style="margin-top:12px"><h3>레슨 완료!</h3>${nl ? `<a href="#/lesson/${encodeURIComponent(nl.id)}"><button class="pri">다음 레슨: ${esc(nl.title)}</button></a>` : '<a href="#/play"><button class="pri">연습 대전 하러 가기</button></a>'}</div>`); return; }
     const st = L.steps[si];
     if (st.scenario || st.game) {
       match && match.stop(); board && board.destroy();
       if (st.game) { const d0 = getDeck(st.game.myDeck || defaultDeckId(0)), d1 = getDeck(st.game.aiDeck || defaultDeckId(1)); G = E.createGame({ decks: [d0, d1], names: ['나', 'AI'], first: st.game.first ?? 0, ai: [false, true], sandbox: false }, db); }
       else G = E.createScenario({ ai: [false, true], ...st.scenario, sandbox: false }, db);
-      board = new Board($('#bd'), db, { me: 0, onCardInfo: showCard, onRestart: () => { si--; next(); } });
+      board = new Board($('#bd'), db, { me: 0, mode:'lesson', coach:false, assist:false, onCardInfo: showCard, onRestart: () => { si--; next(); } });
       const orig = board.render.bind(board); board.render = () => { orig(); applyHL(); };
-      match = new LocalMatch(board, db, G, { onEvents: (a, evs, p) => { if (advancing) return; const w = L.steps[si]?.wait; if (matches(w, a, evs, p)) { advancing = true; const mm = match; mm.hold = true; setTimeout(() => { advancing = false; mm.hold = false; next(); }, 900); } } });
+      match = new LocalMatch(board, db, G, { onEvents: (a, evs, p) => { if (advancing) return; const w = L.steps[si]?.wait; if (matches(w, a, evs, p)) { advancing = true; const mm = match; mm.hold = true; advanceTimer=setTimeout(() => { advancing = false; mm.hold = false; if(!closed && mm===match) next(); }, 900); } } });
+      // Keep the opening cost exercise recoverable: a wrong legal move must not strand the learner.
+      if(L.id==='l2-turn') {
+        const send=board.o.send;
+        board.o.send=a=>{const step=L.steps[si], w=step?.wait;
+          if(!G.pending && G.active===0 && (w==='next' || (w?.action && (a.type!==w.action || (w.no && G.cards[a.uid]?.no!==w.no))))) {
+            board.toast(w==='next'?'먼저 레슨 안내에서 다음 단계로 넘어가요.':step.say.split('\n').at(-1));return;
+          }
+          return send(a);
+        };
+      }
       await match.start();
     }
-    say(st); applyHL();
+    if(!closed){say(st); applyHL();}
   };
-  current = { cleanup: () => { match && match.stop(); board && board.destroy(); coach && coach.remove(); } };
+  current = { cleanup: () => { closed=true; clearTimeout(advanceTimer); match && match.stop(); board && board.destroy(); coach && coach.remove(); } };
   next();
 }
 
@@ -465,7 +484,7 @@ const PEER_PREFIX = 'oddlys-opcg-rps1-';
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] };
 function loadPeer() {
   if (window.Peer) return Promise.resolve();
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261836'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261846'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
 }
 function pageOnline(main) {
   setNav('online');

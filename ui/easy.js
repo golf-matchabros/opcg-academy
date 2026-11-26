@@ -43,11 +43,12 @@ export function tipsFor(ab, keywords = []) {
     if (s.do === 'bounce') tips.add('패로 돌려보내면 상대는 다시 코스트를 내야 해요');
     if (s.do === 'draw') tips.add('손패가 늘어나서 할 수 있는 게 많아져요');
     if (s.do === 'search') tips.add('덱에서 필요한 카드를 찾아오는 효과예요');
-    if (s.do === 'addDon' || s.do === 'attachDon') tips.add('두웅!!이 늘면 더 비싼 카드를 내거나 파워를 올릴 수 있어요');
+    if (s.do === 'addDon') tips.add('두웅!! 덱에서 필드로 가져와요. 레스트로 놓인 카드는 당장 비용으로 못 써요');
+    if (s.do === 'attachDon') tips.add('이미 필드에 있는 두웅!!을 붙이는 효과예요. 붙인 카드 1장당 내 턴에 파워 +1000이에요');
     if (s.do === 'returnDon') tips.add(opp ? '상대 두웅!!이 줄어서 다음 턴에 할 수 있는 게 줄어요' : '두웅!!을 덱으로 돌려보내는 대가를 치르는 거예요');
     if (s.do === 'manual') tips.add('이 부분은 지원하지 않아서 게임 상태에 반영되지 않아요');
   }
-  if (ab?.timing === 'trigger') tips.add('【트리거】: 내가 대미지를 받아 라이프에서 이 카드가 나오면, 손으로 가져가는 대신 공짜로 효과를 쓸 수 있어요');
+  if (ab?.timing === 'trigger') tips.add('【트리거】: 내가 대미지를 받아 라이프에서 이 카드가 나오면, 손으로 가져가는 대신 트리거 효과를 선택할 수 있어요. 적힌 조건이나 비용은 따라야 해요');
   if (ab?.timing === 'counter') tips.add('【카운터】 이벤트: 상대 턴에 내가 어택당했을 때만 쓸 수 있어요');
   if (ab?.oncePerTurn) tips.add('【턴 1회】: 한 턴에 한 번만 쓸 수 있어요');
   if (ab?.donReq) tips.add(`【두웅!!×${ab.donReq}】: 이 카드에 두웅!!이 ${ab.donReq}장 이상 붙어 있어야 효과가 켜져요`);

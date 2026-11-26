@@ -1,8 +1,9 @@
 // 대전 보드 UI: 상태 렌더 + 클릭 조작 + 효과 연출(이동/파워/어택 화살표/효과 해설 배너)
-import * as E from '../engine/core.js?v=202611261836';
-import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261836';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261836';
-import { evalPlay, roleOf } from './coach.js?v=202611261836';
+import * as E from '../engine/core.js?v=202611261846';
+import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261846';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611261846';
+import { evalPlay, roleOf } from './coach.js?v=202611261846';
+import { donArea, attachedDon } from './don.js?v=202611261846';
 
 const KW_LABEL = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐)', doubleAttack: '더블', banish: '배니시', unblockable: '블록불가' };
 const KW_TIP = { blocker: '블로커: 상대가 어택하면 이 캐릭터를 눕혀서 대신 막을 수 있어요', rush: '속공: 나온 턴에 바로 어택할 수 있어요', rushCharacter: '속공(캐릭터): 나온 턴에 상대 캐릭터만 어택할 수 있어요', doubleAttack: '더블 어택: 리더를 맞히면 라이프 2장', banish: '배니시: 맞은 라이프가 트래시로 (트리거 불가)', unblockable: '블록 불가: 블로커로 막을 수 없어요' };
@@ -100,7 +101,6 @@ export class Board {
       if (onField && c.type !== 'stage') {
         const pw = E.power(G, this.db, uid), bp = c.power || 0;
         badges += `<div class="pw ${pw > bp ? 'up' : pw < bp ? 'down' : ''}">${pw}</div>`;
-        if (i.don) badges += `<div class="dn">+${i.don}</div>`;
         const kws = Object.keys(KW_LABEL).filter(k => E.hasKw(G, this.db, uid, k));
         if (kws.length) badges += `<div class="kw">${kws.map(k => `<span data-tip="${esc(KW_TIP[k] || '')}">${KW_LABEL[k]}</span>`).join('')}</div>`;
       }
@@ -108,17 +108,21 @@ export class Board {
       return `<button type="button" ${locked ? 'disabled' : ''} class="${cls}" data-uid="${uid}" aria-label="${esc(c.name)}" title="${esc(c.name)}"><img alt="" src="${imgSrc(c)}" data-src2="${c.src}" loading="lazy">${badges}${this.coachTags(uid)}${extra}</button>`;
     };
     const lifeHtml = (P, p) => `<div class="life" data-pile="life${p}" data-tip="라이프: 리더가 맞으면 1장씩 손패로 가요. 0장일 때 한 번 더 맞으면 패배!"><div class="stack">${P.life.map((l, k) => `<div class="lc" style="top:${k * 8}px" data-life="${p}"></div>`).join('')}</div><div class="num">${P.life.length}</div><div class="zlabel">라이프</div></div>`;
-    const donHtml = (P, p) => `<div class="don" data-pile="don${p}" data-tip="두웅!!: 밝은 건 쓸 수 있는 것(액티브), 어두운 건 이미 쓴 것(레스트). 카드를 낼 때 코스트만큼 눕혀요"><div class="tokens">${'<div class="t"></div>'.repeat(P.donActive)}${'<div class="t r"></div>'.repeat(P.donRested)}</div><div>두웅!! <b style="color:var(--acc)">${P.donActive}</b>/${P.donActive + P.donRested} · 덱 ${P.donDeck}</div></div>`;
+    const fieldSlot = uid => {
+      const card = G.cards[uid];
+      const attached = card && !card.hidden && card.don > 0 ? attachedDon(uid, card.don, esc(this.C(card.no).name)) : '';
+      return `<div class="field-piece${attached ? ' with-don' : ''}"><div class="slot">${cardHtml(uid)}</div>${attached}</div>`;
+    };
     const pileHtml = (P, p) => {
       const top = P.trash[P.trash.length - 1]; const tc = top && G.cards[top] && !G.cards[top].hidden ? this.C(G.cards[top].no) : null;
       return `<div class="zone"><div><div class="pile" data-pile="deck${p}"><b>${P.deck.length}</b>덱</div></div><div><div class="pile trash" data-pile="trash${p}" data-trash="${p}" role="button" tabindex="0" aria-label="${esc(P.name)} 트래시 ${P.trash.length}장 보기">${tc ? `<img src="${imgSrc(tc)}">` : ''}<b>${P.trash.length}</b></div><div class="zlabel">트래시</div></div></div>`;
     };
     const fieldRow = (p) => {
       const P = G.players[p];
-      return `<div class="frow">${lifeHtml(P, p)}<div><div class="slot">${cardHtml(P.leader)}</div><div class="zlabel">리더</div></div>
-        <div><div class="slot">${P.stage ? cardHtml(P.stage) : '<div class="pile">스테이지</div>'}</div></div>
-        <div class="zone" style="flex:1;flex-wrap:wrap">${P.chars.map(u => `<div class="slot">${cardHtml(u)}</div>`).join('') || '<span class="mut" style="font-size:12px">캐릭터 없음</span>'}</div>
-        ${pileHtml(P, p)}${donHtml(P, p)}</div>`;
+      return `<div class="frow">${lifeHtml(P, p)}<div>${fieldSlot(P.leader)}<div class="zlabel">리더</div></div>
+        <div>${P.stage ? fieldSlot(P.stage) : '<div class="slot"><div class="pile">스테이지</div></div>'}</div>
+        <div class="zone" style="flex:1;flex-wrap:wrap">${P.chars.map(fieldSlot).join('') || '<span class="mut" style="font-size:12px">캐릭터 없음</span>'}</div>
+        ${pileHtml(P, p)}</div>${donArea(P, p, p === me)}`;
     };
     const P = G.players[me], O = G.players[op];
     const turnTxt = G.winner !== null ? '게임 종료' : `${G.turn}턴 · <b>${esc(G.players[G.active].name)}</b>의 ${PHASE[G.phase] || G.phase} 페이즈`;
@@ -257,12 +261,12 @@ export class Board {
         }
       } else if (pend && pend.type === 'trigger') {
         const c = this.cardOf(pend.uid); const ab = c && E.effectsOf(db, c.no).abilities.find(a => a.timing === 'trigger');
-        h += `<b>【트리거】란?</b><div>맞아서 라이프에서 나온 카드에 【트리거】가 있으면, 손으로 가져가는 대신 <b>공짜로 효과</b>를 쓸 수 있어요.</div>${ab ? `<div>이 카드의 트리거: ${esc(easySentence(explainAbility(ab, c).sentence))}</div>` : ''}<div class="mut">발동하지 않으면 이 카드를 손패에 넣어요</div>`;
+        h += `<b>【트리거】란?</b><div>맞아서 라이프에서 나온 카드에 【트리거】가 있으면, 손으로 가져가는 대신 <b>트리거 효과</b>를 쓸 수 있어요. 효과에 적힌 조건이나 비용이 있다면 따라야 해요.</div>${ab ? `<div>이 카드의 트리거: ${esc(easySentence(explainAbility(ab, c).sentence))}</div>` : ''}<div class="mut">발동하지 않으면 이 카드를 손패에 넣어요</div>`;
       } else if (pend && (pend.type === 'target' || pend.type === 'search')) {
         h += `<b>고르기</b><div>${esc(pend.text || '')}</div><div class="mut">주황색으로 깜빡이는 카드만 고를 수 있어요. 다 고르면 '확인'</div>`;
       } else if (pend && pend.type === 'mulligan') {
         const low = P.hand.map(u => this.cardOf(u)).filter(c => c.type === 'character' && (c.cost ?? 9) <= 3).length;
-        h += `<b>첫 손패 확인</b><div>초반에 낼 수 있는 2~3코스트 캐릭터가 <b>${low}장</b> 있어요. ${low >= 2 ? '이대로 시작해도 좋아요' : '적으면 다시 뽑는 것도 좋아요'}</div>`;
+        h += `<b>첫 손패 확인</b><div>초반에 낼 수 있는 3코스트 이하 캐릭터가 <b>${low}장</b> 있어요. ${low >= 2 ? '이대로 시작해도 좋아요' : '적으면 다시 뽑는 것도 좋아요'}</div>`;
       } else if (pend && pend.type === 'manual') {
         h += `<b>지원하지 않는 효과</b><div>이 단계는 게임에 반영되지 않아요. 보드에서 안내를 확인하면 다음 단계로 넘어가요.</div>`;
       } else if (this.isMyMain()) {
@@ -272,7 +276,7 @@ export class Board {
         const a = (this.plan && this.plan[0] && this.plan[0].a.type !== 'win') ? this.plan[0].a : E.aiTurnActions(clone, db, me);
         let why = '';
         if (a.type === 'play') { const c = this.cardOf(a.uid); this.rec = [a.uid]; why = `${nm(a.uid)}를(을) 내보세요 (코스트 ${E.costOf(G, db, a.uid)}). ${c.type === 'character' ? '다음 턴에 어택할 캐릭터를 준비할 수 있어요' : c.type === 'stage' ? '필드에 스테이지를 놓을 수 있어요' : '메인 효과를 사용할 수 있어요'}`; }
-        else if (a.type === 'attachDon') { this.rec = [a.uid]; why = `${nm(a.uid)}에 두웅!! ${a.n}장을 붙여 파워를 올려요 (상대 리더 파워 ${E.power(G, db, O.leader)} 이상이면 어택이 성공해요)`; }
+        else if (a.type === 'attachDon') { this.rec = [a.uid]; why = `${nm(a.uid)}에 두웅!! ${a.n}장을 붙여 파워를 올려요 (상대 리더는 파워 ${E.power(G, db, O.leader)}예요. 내 파워가 같거나 높아도 블로커나 카운터로 막힐 수 있어요)`; }
         else if (a.type === 'attack') { this.rec = [a.uid, a.target]; why = `${nm(a.uid)}(파워 ${E.power(G, db, a.uid)})로 ${a.target === O.leader ? '상대 리더' : nm(a.target)}(파워 ${E.power(G, db, a.target)})를 어택해 보세요`; }
         else if (a.type === 'activate') { this.rec = [a.uid]; why = `${nm(a.uid)}의 효과를 발동할 수 있어요`; }
         else why = '더 할 게 없으면 <b>턴 종료</b>를 눌러요';

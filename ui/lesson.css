@@ -1,0 +1,4 @@
+/* Keep the lesson brief in the reading order; a fixed panel used to cover the hand on phones. */
+.lesson-guide.coach{position:static;box-sizing:border-box;width:100%;max-width:920px;margin:0 0 14px;box-shadow:none;background:#101a2d;padding:10px 16px}
+.lesson-guide .filters{margin:8px 0;gap:8px}.lesson-guide .bt{flex-wrap:wrap;align-items:center}.lesson-guide [aria-live]:not(:empty){padding:5px 0;color:#bcebd7}
+@media(max-width:700px){.lesson-guide.coach{padding:10px 12px}.lesson-guide button{min-height:40px}.lesson-guide .bt{justify-content:flex-start}}
