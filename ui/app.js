@@ -1,9 +1,9 @@
 // 앱: 라우터 + 카드 사전 + 덱 + 연습 대전 + 효과 시연 + 튜토리얼 + 온라인 대전
-import * as E from '../engine/core.js?v=202611261803';
-import { explainCard } from '../engine/explain.js?v=202611261803';
-import { validateDeck } from '../engine/rules.js?v=202611261803';
-import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261803';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261803';
+import * as E from '../engine/core.js?v=202611261811';
+import { explainCard } from '../engine/explain.js?v=202611261811';
+import { validateDeck } from '../engine/rules.js?v=202611261811';
+import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261811';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611261811';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -17,7 +17,7 @@ let current = null; // 현재 화면 정리 함수
 
 async function boot() {
   const [cards, effects, decks, glossary, reg, lessons] = await Promise.all([
-    getJSON('data/cards.json?v=202611261803', []), getJSON('data/effects.json?v=202611261803', {}), getJSON('data/decks.json?v=202611261803', []), getJSON('data/glossary.json?v=202611261803', {}), getJSON('data/regulation.json?v=202611261803', {}), getJSON('data/lessons.json?v=202611261803', []),
+    getJSON('data/cards.json?v=202611261811', []), getJSON('data/effects.json?v=202611261811', {}), getJSON('data/decks.json?v=202611261811', []), getJSON('data/glossary.json?v=202611261811', {}), getJSON('data/regulation.json?v=202611261811', {}), getJSON('data/lessons.json?v=202611261811', []),
   ]);
   const ord = c => { const m = c.no.match(/^([A-Z]+)(\d+)-(\d+)/); if (!m) return [9, 0, 0]; const t = { OP: 0, EB: 1, ST: 2, PRB: 3, P: 4 }[m[1]] ?? 5; return [t, -(+m[2]), +m[3]]; };
   cards.sort((a, b) => { const x = ord(a), y = ord(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.no.localeCompare(b.no); });
@@ -333,7 +333,18 @@ function pagePlay(main, arg) {
     <label>AI 덱 <select id="d1" style="max-width:300px">${deckOptions(defaultDeckId(1))}</select></label>
     <label>순서 <select id="fp"><option value="r">랜덤</option><option value="0">내가 선공</option><option value="1">내가 후공</option></select></label>
     <label class="mut"><input type="checkbox" id="sb" checked> 수동 조작 항상 허용(연습용)</label>
-    <button class="pri" id="go">대전 시작</button></div><div id="bd"></div>`;
+    <button class="pri" id="go">대전 시작</button></div>
+    <div id="bd"><div class="intro">
+      <h2 style="margin-top:0">처음이라면 이렇게 해보세요</h2>
+      <ol>
+        <li><b>내 덱</b>은 그대로 두고(공식 추천 덱), <b>AI 덱</b>도 아무거나 괜찮아요.</li>
+        <li>노란 <b>대전 시작</b> 버튼을 누르세요.</li>
+        <li>첫 손패가 나오면 <b>이대로 시작</b>을 누르면 돼요.</li>
+        <li>내 차례가 되면 <b>코치</b>가 카드 위에 <span class="ctag ok" style="position:static">낼 수 있어</span> <span class="ctag no" style="position:static">두웅!! 부족</span> 같은 표시와 ①②③ 추천 순서를 보여주고, 말풍선으로 다음에 할 걸 가리켜요.</li>
+        <li>카드를 누르면 메뉴가 나와요(내기 / 어택하기 / 두웅!! 붙이기). 카드에 마우스를 올리면 크게 보여요.</li>
+      </ol>
+      <div class="mut">코치 표시는 연습 대전·튜토리얼에서만 나오고, 사람 vs 사람 대전에서는 나오지 않아요. 오른쪽 '초보 도우미' 버튼으로 끌 수 있어요.</div>
+    </div></div>`;
   if (!arg) $('#d1').selectedIndex = Math.min(1, $('#d1').options.length - 1);
   let match, board;
   const start = () => {
@@ -447,7 +458,7 @@ const PEER_PREFIX = 'oddlys-opcg-academy-';
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] };
 function loadPeer() {
   if (window.Peer) return Promise.resolve();
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261803'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261811'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
 }
 function pageOnline(main) {
   setNav('online');
@@ -466,7 +477,7 @@ function pageOnline(main) {
   const cleanup = () => { try { ws && ws.close(); } catch { } try { conn && conn.close(); } catch { } try { peer && peer.destroy(); } catch { } board && board.destroy(); board = null; };
   const showState = async (you, names, state, events, code) => {
     st(`방 ${code} · ${names.join(' vs ')}`);
-    if (!board) board = new Board($('#bd'), db, { me: you, onCardInfo: showCard, send: a => sendAction(a) });
+    if (!board) board = new Board($('#bd'), db, { me: you, coach: false, onCardInfo: showCard, send: a => sendAction(a) });
     board.o.me = you;
     await board.update(state, events || []);
   };
