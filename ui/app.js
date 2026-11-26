@@ -1,11 +1,12 @@
 // 앱: 라우터 + 카드 사전 + 덱 + 연습 대전 + 효과 시연 + 튜토리얼 + 온라인 대전
-import * as E from '../engine/core.js?v=202611261846';
-import { newOpening, applyOpening, openingView, HANDS } from '../engine/opening.js?v=202611261846';
-import { drawOpening } from './opening.js?v=202611261846';
-import { explainCard } from '../engine/explain.js?v=202611261846';
-import { validateDeck } from '../engine/rules.js?v=202611261846';
-import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261846';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261846';
+import * as E from '../engine/core.js?v=202611261856';
+import { practiceStep } from '../engine/practice-ai.js?v=202611261856';
+import { newOpening, applyOpening, openingView, HANDS } from '../engine/opening.js?v=202611261856';
+import { drawOpening } from './opening.js?v=202611261856';
+import { explainCard } from '../engine/explain.js?v=202611261856';
+import { validateDeck } from '../engine/rules.js?v=202611261856';
+import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261856';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611261856';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -20,7 +21,7 @@ let current = null; // 현재 화면 정리 함수
 
 async function boot() {
   const [cards, effects, decks, glossary, reg, lessons] = await Promise.all([
-    getJSON('data/cards.json?v=202611261846', []), getJSON('data/effects.json?v=202611261846', {}), getJSON('data/decks.json?v=202611261846', []), getJSON('data/glossary.json?v=202611261846', {}), getJSON('data/regulation.json?v=202611261846', {}), getJSON('data/lessons.json?v=202611261846', []),
+    getJSON('data/cards.json?v=202611261856', []), getJSON('data/effects.json?v=202611261856', {}), getJSON('data/decks.json?v=202611261856', []), getJSON('data/glossary.json?v=202611261856', {}), getJSON('data/regulation.json?v=202611261856', {}), getJSON('data/lessons.json?v=202611261856', []),
   ]);
   const ord = c => { const m = c.no.match(/^([A-Z]+)(\d+)-(\d+)/); if (!m) return [9, 0, 0]; const t = { OP: 0, EB: 1, ST: 2, PRB: 3, P: 4 }[m[1]] ?? 5; return [t, -(+m[2]), +m[3]]; };
   cards.sort((a, b) => { const x = ord(a), y = ord(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.no.localeCompare(b.no); });
@@ -334,23 +335,28 @@ function pagePlay(main, arg) {
   main.innerHTML = `<h1>연습 대전 (AI)</h1><div class="filters">
     <label>내 덱 <select id="d0" style="max-width:300px">${deckOptions(arg || defaultDeckId(0))}</select></label>
     <label>AI 덱 <select id="d1" style="max-width:300px">${deckOptions(defaultDeckId(1))}</select></label>
+    <label>상대 난이도 <select id="opponent-level"><option value="tactical">실전 AI</option><option value="basic">입문 AI</option></select></label>
     <button class="pri" id="go">가위바위보로 시작</button></div>
     <div id="order-note" role="status"></div><div id="bd"><section class="intro"><h2>첫 턴은 이렇게 시작해</h2>
     <p>가위바위보에서 이긴 사람이 선공이나 후공을 골라. 그다음 첫 패 5장을 보고, 그대로 시작하거나 딱 한 번 전부 바꿀 수 있어.</p>
-    <p>턴 드로우와 두웅!!은 게임이 알아서 처리해. 선공 첫 턴에는 카드를 뽑지 않고 두웅!! 1장만 받아. 낼 카드가 없으면 <b>턴 종료</b>를 눌러. 양쪽 모두 자기 첫 턴에는 어택할 수 없어.</p><a href="#/lesson/l2-turn">두웅!!으로 카드 내기부터 연습하기</a></section></div>`;
+    <p>턴 드로우와 두웅!!은 게임이 알아서 처리해. 선공 첫 턴에는 카드를 뽑지 않고 두웅!! 1장만 받아. 낼 카드가 없으면 <b>턴 종료</b>를 눌러. 양쪽 모두 자기 첫 턴에는 어택할 수 없어.</p><p><b>AI 효과는 읽고 넘어가.</b> 상대 카드가 효과를 쓰면 해설에서 무엇이 바뀌는지 확인하고 <b>읽었어 · 계속</b>을 눌러.</p><a href="#/lesson/l2-turn">두웅!!으로 카드 내기부터 연습하기</a></section></div>`;
+  const level=$('#opponent-level'); level.value=localStorage.getItem('practice-level')==='basic'?'basic':'tactical';
+  level.onchange=()=>localStorage.setItem('practice-level',level.value);
   if (!arg) $('#d1').selectedIndex = Math.min(1, $('#d1').options.length - 1);
   let match, board;
   const start = () => {
     match?.stop(); board?.destroy(); match = board = null;
     const setup = newOpening(), root = $('#bd'), ui = $('#go').closest('.filters');
+    const tactical = level.value === 'tactical';
     const ds = [getDeck($('#d0').value),getDeck($('#d1').value)];
     ui.hidden = true; ui.style.display='none'; $('#order-note').textContent='';
     const again = () => { match?.stop(); board?.destroy(); pagePlay(main,arg); };
     const launch = () => {
       const first = setup.first;
       $('#order-note').textContent = (setup.winner===0 ? '내가 이겼어. ' : 'AI가 이겼어. ') + (first===0 ? '내가 선공, AI가 후공이야.' : 'AI가 선공, 내가 후공이야.');
-      const G = E.createGame({decks:ds,names:['나','AI'],first,orderChooser:setup.winner,ai:[false,true],sandbox:false},db);
-      board = new Board(root,db,{me:0,onCardInfo:showCard,onRestart:again});
+      const G = E.createGame({decks:ds,names:['나','AI'],first,orderChooser:setup.winner,ai:[false,!tactical],sandbox:false},db);
+      $('#order-note').textContent += tactical ? ' · 실전 AI' : ' · 입문 AI';
+      board = new Board(root,db,{me:0,mode:'practice',opponentStep:tactical?practiceStep:E.aiStep,onCardInfo:showCard,onRestart:again});
       match = new LocalMatch(board,db,G,{}); match.start();
     };
     const draw = () => {
@@ -484,7 +490,7 @@ const PEER_PREFIX = 'oddlys-opcg-rps1-';
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] };
 function loadPeer() {
   if (window.Peer) return Promise.resolve();
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261846'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261856'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
 }
 function pageOnline(main) {
   setNav('online');

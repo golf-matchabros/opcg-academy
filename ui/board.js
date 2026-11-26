@@ -1,9 +1,10 @@
 // 대전 보드 UI: 상태 렌더 + 클릭 조작 + 효과 연출(이동/파워/어택 화살표/효과 해설 배너)
-import * as E from '../engine/core.js?v=202611261846';
-import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261846';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261846';
-import { evalPlay, roleOf } from './coach.js?v=202611261846';
-import { donArea, attachedDon } from './don.js?v=202611261846';
+import * as E from '../engine/core.js?v=202611261856';
+import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261856';
+import { easySentence, glossify } from './easy.js?v=202611261856';
+import { evalPlay, roleOf } from './coach.js?v=202611261856';
+import { EffectReader, collectEffects } from './effect-reader.js?v=202611261856';
+import { donArea, attachedDon } from './don.js?v=202611261856';
 
 const KW_LABEL = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐)', doubleAttack: '더블', banish: '배니시', unblockable: '블록불가' };
 const KW_TIP = { blocker: '블로커: 상대가 어택하면 이 캐릭터를 눕혀서 대신 막을 수 있어요', rush: '속공: 나온 턴에 바로 어택할 수 있어요', rushCharacter: '속공(캐릭터): 나온 턴에 상대 캐릭터만 어택할 수 있어요', doubleAttack: '더블 어택: 리더를 맞히면 라이프 2장', banish: '배니시: 맞은 라이프가 트래시로 (트리거 불가)', unblockable: '블록 불가: 블로커로 막을 수 없어요' };
@@ -18,13 +19,13 @@ export function imgBig(c) { return c ? `img/m/${c.no}.webp?v=${IMGV}` : ''; }
 export function imgFallback(el, c) { el.onerror = () => { el.onerror = null; if (c && c.src) el.src = c.src; }; }
 
 export class Board {
-  // opts: { me, mode:'ai'|'demo'|'lesson'|'online'|'hotseat', send(action) -> Promise, onCardInfo(no), speed, panel:Element }
+  // opts: { me, mode:'practice'|'ai'|'demo'|'lesson'|'online'|'hotseat', send(action) -> Promise, onCardInfo(no), speed, panel:Element }
   constructor(root, db, opts) {
     this.root = root; this.db = db; this.o = Object.assign({ me: 0, speed: 1, slow: false }, opts);
-    this.G = null; this.sel = null; this.picks = []; this.rects = {}; this.busy = false; this.sending = false; this.revision = 0; this.destroyed = false; this.lastAbility = null;
+    this.G = null; this.sel = null; this.picks = []; this.rects = {}; this.busy = false; this.sending = false; this.revision = 0; this.destroyed = false;
     if (this.o.assist === undefined) this.o.assist = localStorage.getItem('assist') !== '0';
     if (this.o.coach === undefined) this.o.coach = true;
-    root.innerHTML = `<div class="play-wrap"><div class="board"></div><aside class="panel"><div class="assist"></div><div class="preview" style="display:none"></div><h3>효과 해설</h3><div class="explain mut">카드가 효과를 쓰면 여기서 단계별로 풀어 보여줘요. 카드에 마우스를 올리면 위에 쉬운 설명이 나와요.</div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="sizebar">카드 크기 <button data-sz="s">작게</button><button data-sz="m">보통</button><button data-sz="l">크게</button></div><div class="sizebar">확대 보기 <button class="zm">${localStorage.getItem('zoom') === '0' ? '꺼짐' : '켜짐'}</button></div><button class="ghost as">초보 도우미: ${this.o.assist ? '켜짐' : '꺼짐'}</button><button class="ghost sp">연출 속도: 보통</button><button class="ghost lg">로그 지우기</button></div><div class="log"></div></aside></div>`;
+    root.innerHTML = `<div class="play-wrap"><div class="board"></div><aside class="panel"><section class="effect-reader" aria-label="효과 읽기"></section><div class="assist"></div><div class="preview" style="display:none"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="sizebar">카드 크기 <button data-sz="s">작게</button><button data-sz="m">보통</button><button data-sz="l">크게</button></div><div class="sizebar">확대 보기 <button class="zm">${localStorage.getItem('zoom') === '0' ? '꺼짐' : '켜짐'}</button></div><button class="ghost as">초보 도우미: ${this.o.assist ? '켜짐' : '꺼짐'}</button><button class="ghost sp">연출 속도: 보통</button><button class="ghost lg">로그 지우기</button></div><div class="log"></div></aside></div>`;
     this.el = root.querySelector('.board');
     this.asEl = root.querySelector('.assist'); this.pvEl = root.querySelector('.preview');
     root.querySelector('.as').onclick = (e) => { this.o.assist = !this.o.assist; localStorage.setItem('assist', this.o.assist ? '1' : '0'); e.target.textContent = '초보 도우미: ' + (this.o.assist ? '켜짐' : '꺼짐'); this.render(); };
@@ -37,7 +38,7 @@ export class Board {
     root.querySelector('.zm').onclick = (e) => { const on = localStorage.getItem('zoom') === '0'; localStorage.setItem('zoom', on ? '1' : '0'); e.target.textContent = on ? '켜짐' : '꺼짐'; if (!on) this.hideZoom(); };
     // 확대 보기: 카드에 마우스를 올리면 크게
     this.el.addEventListener('mousemove', e => {
-      if (localStorage.getItem('zoom') === '0') return;
+      if (this.busy || localStorage.getItem('zoom') === '0') { this.hideZoom(); return; }
       const n = e.target.closest('[data-uid]'); const c = n && n.dataset.uid && this.cardOf(n.dataset.uid);
       if (!c) { this.hideZoom(); return; }
       if (!this.zoomEl) { this.zoomEl = document.createElement('div'); this.zoomEl.className = 'zoom'; this.zoomEl.innerHTML = '<img>'; document.body.appendChild(this.zoomEl); }
@@ -45,12 +46,22 @@ export class Board {
       if (this.zoomEl.dataset.no !== c.no) { this.zoomEl.dataset.no = c.no; im.src = imgSrc(c); const big = new Image(); big.onload = () => { if (this.zoomEl && this.zoomEl.dataset.no === c.no) im.src = big.src; }; big.src = imgBig(c); }
       this.zoomEl.style.display = '';
       const w = this.zoomEl.offsetWidth || 320, h = this.zoomEl.offsetHeight || 450;
-      let x = e.clientX + 24; if (x + w > window.innerWidth - 8) x = e.clientX - w - 24;
-      let y = e.clientY - h / 2; y = Math.max(8, Math.min(window.innerHeight - h - 8, y));
+      const br = this.el.getBoundingClientRect(), nr = n.getBoundingClientRect();
+      const left = Math.max(8,br.left), right = Math.min(window.innerWidth-8,br.right), top = Math.max(8,br.top), bottom = Math.min(window.innerHeight-8,br.bottom);
+      const x = nr.right + 12 + w <= right ? nr.right + 12 : nr.left - 12 - w;
+      if (x < left || bottom-top < h) { this.hideZoom(); return; }
+      const y = Math.max(top, Math.min(bottom-h, e.clientY-h/2));
       this.zoomEl.style.left = x + 'px'; this.zoomEl.style.top = y + 'px';
     });
     this.el = root.querySelector('.board');
-    this.exEl = root.querySelector('.explain');
+    this.reader = new EffectReader(root.querySelector('.effect-reader'));
+    const panel = root.querySelector('.panel');
+    this.readerLayout = window.matchMedia('(max-width:760px)');
+    this.placeReader = () => {
+      if (this.readerLayout.matches) this.el.before(this.reader.el);
+      else panel.prepend(this.reader.el);
+    };
+    this.placeReader(); this.readerLayout.addEventListener('change',this.placeReader);
     this.logEl = root.querySelector('.log');
     root.querySelector('.sp').onclick = (e) => { const s = [1, 1.8, 0.5]; const n = ['보통', '천천히', '빠르게']; this.spi = ((this.spi || 0) + 1) % 3; this.o.speed = s[this.spi]; e.target.textContent = '연출 속도: ' + n[this.spi]; };
     root.querySelector('.lg').onclick = () => { this.logEl.innerHTML = ''; };
@@ -59,7 +70,7 @@ export class Board {
     document.addEventListener('click', this._docClick = (e) => { if (this.menu && !this.menu.contains(e.target)) this.closeMenu(); }, true);
   }
   hideZoom() { if (this.zoomEl) this.zoomEl.style.display = 'none'; }
-  destroy() { this.destroyed = true; document.removeEventListener('click', this._docClick, true); this.closeMenu(); if (this.zoomEl) { this.zoomEl.remove(); this.zoomEl = null; } }
+  destroy() { this.destroyed = true; this.reader.close(); this.readerLayout.removeEventListener('change',this.placeReader); document.removeEventListener('click', this._docClick, true); this.closeMenu(); if (this.zoomEl) { this.zoomEl.remove(); this.zoomEl = null; } }
   get me() { return this.o.me; }
   get observing() { return this.o.mode === 'demo' || !!this.G?.ai?.[this.me]; }
   C(no) { return this.db.cards.get(no); }
@@ -121,7 +132,7 @@ export class Board {
       const P = G.players[p];
       return `<div class="frow">${lifeHtml(P, p)}<div>${fieldSlot(P.leader)}<div class="zlabel">리더</div></div>
         <div>${P.stage ? fieldSlot(P.stage) : '<div class="slot"><div class="pile">스테이지</div></div>'}</div>
-        <div class="zone" style="flex:1;flex-wrap:wrap">${P.chars.map(fieldSlot).join('') || '<span class="mut" style="font-size:12px">캐릭터 없음</span>'}</div>
+        <div class="zone field-characters">${P.chars.map(fieldSlot).join('') || '<span class="mut" style="font-size:12px">캐릭터 없음</span>'}</div>
         ${pileHtml(P, p)}</div>${donArea(P, p, p === me)}`;
     };
     const P = G.players[me], O = G.players[op];
@@ -133,7 +144,7 @@ export class Board {
     this.el.querySelectorAll('img[data-src2]').forEach(im => { im.onerror = () => { im.onerror = null; im.src = im.dataset.src2; }; });
     this.renderCtrl(pend);
     try { this.drawCallout(); } catch (e) { console.warn(e); }
-    if (G.winner !== null) {
+    if (G.winner !== null && !this.busy) {
       const w = document.createElement('div'); w.className = 'winbox';
       w.innerHTML = `<div><h1>${G.winner === me ? '승리!' : '패배'}</h1><p class="mut">${esc(G.loseReason || '')}</p><button class="pri again">다시 하기</button></div>`;
       w.querySelector('.again').onclick = () => this.o.onRestart && this.o.onRestart();
@@ -220,21 +231,12 @@ export class Board {
     this.el.querySelectorAll('.callout').forEach(n => n.remove());
     if (!this.o.coach || !this.o.assist || !this.isMyMain() || this.sel || !this.plan || !this.plan.length) return;
     const step = this.plan[0];
-    let node = step.uid ? this.el.querySelector(`[data-uid="${step.uid}"]`) : this.el.querySelector('.ctrl button.pri');
-    if (!node) return;
-    const br = this.el.getBoundingClientRect(), r = node.getBoundingClientRect();
     const verb = { play: '이걸 내봐!', attachDon: '여기에 두웅!!을 붙여봐!', attack: '이걸로 어택해봐!', activate: '이 효과를 써봐!', endTurn: '이제 턴을 끝내도 돼!', win: '이번 턴에 이길 수 있어!' }[step.a.type] || '';
     const d = document.createElement('div'); d.className = 'callout';
     let why = '';
     if (step.a.type === 'play') { const ev = this.evalOf(step.uid); why = (ev.good[0] || ev.info[0] || ''); if (ev.grade === 'meh') why = (ev.bad[0] || '') + (ev.info.find(x => x.includes('의미')) ? ' · ' + ev.info.find(x => x.includes('의미')) : ''); }
     d.innerHTML = `<b>① ${verb}</b><div>${esc(step.text)}</div>${why ? `<div class="cwhy">${esc(why)}</div>` : ''}${step.a.type !== 'endTurn' ? '<div class="mut" style="font-size:11px">카드를 눌러서 메뉴에서 고르면 돼요</div>' : ''}`;
-    this.el.appendChild(d);
-    const w = d.offsetWidth, h = d.offsetHeight;
-    let left = r.left - br.left + r.width / 2 - w / 2; left = Math.max(6, Math.min(br.width - w - 6, left));
-    let top = r.top - br.top - h - 18; let below = false;
-    if (top < 4) { top = r.bottom - br.top + 18; below = true; }
-    d.style.left = left + 'px'; d.style.top = top + 'px'; d.classList.toggle('below', below);
-    d.style.setProperty('--ax', (r.left - br.left + r.width / 2 - left) + 'px');
+    this.el.querySelector('.mid').appendChild(d);
   }
   computeAssist(pend) {
     const G = this.G, db = this.db, me = this.me; this.rec = null;
@@ -281,35 +283,31 @@ export class Board {
         else if (a.type === 'activate') { this.rec = [a.uid]; why = `${nm(a.uid)}의 효과를 발동할 수 있어요`; }
         else why = '더 할 게 없으면 <b>턴 종료</b>를 눌러요';
         h += `<div class="recline">추천: ${why}</div>`;
-        if (this.o.coach && this.plan && this.plan.length > 1) h += `<div class="plan"><b>이번 턴 추천 순서</b>${this.plan.map((p, k) => `<div>${'①②③④⑤⑥⑦⑧'[k]} ${esc(p.text)}</div>`).join('')}</div>`;
+        if (this.o.coach && this.plan && this.plan.length > 1) h += `<details class="plan"><summary>이번 턴 추천 순서</summary>${this.plan.map((p, k) => `<div>${'①②③④⑤⑥⑦⑧'[k]} ${esc(p.text)}</div>`).join('')}</details>`;
         if (this.o.coach) {
           const rows = P.hand.filter(u => L.play.includes(u)).map(u => { const ev = this.evalOf(u); const c = this.cardOf(u); const r = ev.grade === 'meh' ? ev.bad[0] : (ev.good[0] || ev.info[0] || roleOf(db, c).role); return `<div class="hrow ${ev.grade}"><span class="g">${ev.grade === 'good' ? '추천' : ev.grade === 'meh' ? '별로' : '가능'}</span> <b>${esc(c.name)}</b> <span class="mut">${esc(r || '')}</span></div>`; });
-          if (rows.length) h += `<div class="plan"><b>지금 낼 수 있는 카드, 내면 어떨까?</b>${rows.join('')}</div>`;
+          if (rows.length) h += `<details class="plan"><summary>손패 추천 이유 (${rows.length}장)</summary>${rows.join('')}</details>`;
         }
-        h += `<div class="mut" style="font-size:11px">초록 = 추천/가능 · 노랑 = 낼 순 있지만 지금은 별로 · 빨강 = 못 내는 이유 · 숫자 = 추천 순서 · 카드에 마우스를 올리면 자세한 이유</div>`;
       }
     } catch (e) { console.warn(e); }
     this.asEl.innerHTML = h ? `<div class="assistbox">${h}</div>` : '';
   }
   preview(uid) {
-    if (!this.o.assist) return;
+    if (!this.o.assist || this.busy) return;
     const c = this.cardOf(uid); if (!c) { this.pvEl.style.display = 'none'; return; }
     let ex; try { ex = explainCard(c.no, this.db.effects, this.db.list || [...this.db.cards.values()]); } catch { ex = null; }
-    const eff = E.effectsOf(this.db, c.no);
-    const tips = [...new Set(eff.abilities.flatMap(a => tipsFor(a, [])).concat(tipsFor(null, eff.keywords || [])))].slice(0, 3);
+    const summary = ex?.abilities?.[0]?.result || ex?.keywords?.[0]?.text || (c.text ? '자세한 효과는 카드 설명에서 확인해요.' : '효과 없이 파워로 싸우는 카드예요.');
     const g = this.db.glossary || {};
     this.pvEl.style.display = '';
     this.pvEl.innerHTML = `<div class="pvh"><img src="${imgSrc(c)}"><div><b>${esc(c.name)}</b><div class="mut" style="font-size:11px">${c.type === 'leader' ? '리더' : c.type === 'event' ? '이벤트' : c.type === 'stage' ? '스테이지' : '캐릭터'} · ${c.cost != null ? '코스트 ' + c.cost + ' · ' : ''}파워 ${c.power ?? '-'}${c.counter ? ' · 카운터 +' + c.counter : ''}</div></div></div>
-      ${(ex?.keywords || []).map(k => `<div class="pvl"><b class="kwh">【${esc(String(k.name).replace(/[【】\[\]]/g, ''))}】</b> ${esc(k.text)}</div>`).join('')}
-      ${(ex?.abilities || []).map(a => `<div class="pvl">${glossify(easySentence(a.sentence), g)}</div>`).join('') || (c.text ? '' : '<div class="pvl mut">효과 없는 카드예요. 파워와 코스트로 싸워요</div>')}
-      ${tips.length ? `<div class="pvtips">${tips.map(t => `<div>팁: ${esc(t)}</div>`).join('')}</div>` : ''}
-      ${this.nowBox(uid, c)}`;
+      <div class="pvl">${glossify(summary.length > 95 ? summary.slice(0,94) + '…' : summary, g)}</div>
+      ${this.nowBox(uid, c)}<small class="mut">전체 설명: 카드 메뉴 → 카드 설명 보기</small>`;
   }
   nowBox(uid, c) {
     const G = this.G, i = G.cards[uid];
     if (!this.o.coach || !i || i.owner !== this.me) return '';
     const r = roleOf(this.db, c);
-    let h = `<div class="nowbox"><div class="mut">${esc(r.line)}</div>${r.role ? `<div>어떤 카드? ${esc(r.role)}</div>` : ''}`;
+    let h = `<div class="nowbox">${esc(r.role || r.line || "")}`;
     if (i.zone === 'hand' && this.isMyMain()) {
       const L = this.legal || { play: [] };
       if (!L.play.includes(uid)) {
@@ -318,7 +316,8 @@ export class Board {
       } else {
         const ev = this.evalOf(uid);
         h += `<div class="nb ${ev.grade}">${ev.grade === 'good' ? '지금 내기 좋아요' : ev.grade === 'meh' ? '낼 순 있지만 지금은 별로예요' : '낼 수 있어요'}</div>`;
-        h += [...ev.good.map(x => `<div class="nl good">+ ${esc(x)}</div>`), ...ev.bad.map(x => `<div class="nl bad">- ${esc(x)}</div>`), ...ev.info.map(x => `<div class="nl">· ${esc(x)}</div>`)].join('');
+        const reason = (ev.grade === 'meh' ? ev.bad[0] : ev.good[0]) || ev.info[0];
+        if (reason) h += `<div>${esc(reason)}</div>`;
       }
     }
     return h + '</div>';
@@ -398,13 +397,16 @@ export class Board {
     if (this.destroyed) return;
     const revision = ++this.revision; this.hideZoom();
     this.captureRects();
-    const prev = this.G; this.G = G; this.picks = []; this.sel = null; this.closeMenu();
+    this.pvEl.style.display = 'none'; this._hov = null; this.G = G; this.picks = []; this.sel = null; this.closeMenu();
     this.busy = true; this.render();
-    try { await this.animate(events, prev); } catch (e) { console.warn(e); }
+    try { await this.animate(events, revision); } catch (e) { console.warn(e); }
     if (this.destroyed || revision !== this.revision) return;
     this.busy = false; this.render();
   }
-  async animate(events, prev) {
+  async animate(events, revision) {
+    const stopped = () => this.destroyed || this.reader.closed || revision !== this.revision;
+    const records = collectEffects(events, this, this.reader.records);
+    if (!records.size && events.some(e => e.by) && this.reader.records.length) this.reader.paint();
     const sp = this.o.speed;
     // 1) 이동 (FLIP 고스트)
     const moves = events.filter(e => e.t === 'move' || e.t === 'draw');
@@ -432,13 +434,19 @@ export class Board {
     // 2) 순차 연출
     const PT = { power: e => (e.amount ?? 0) >= 0 ? `파워 +${e.amount}` : `파워 ${e.amount}`, ko: () => 'KO!', rest: () => '레스트', active: () => '액티브', grant: e => ({ blocker: '블로커', rush: '속공', doubleAttack: '더블 어택', banish: '배니시', cannotAttack: '어택 불가', cannotBlock: '블록 불가', unblockable: '블록 불가' }[e.keyword] || '효과 부여'), cost: e => `코스트 ${e.amount > 0 ? '+' : ''}${e.amount}`, negate: () => '효과 무효', attach: () => '두웅!! 부여' };
     for (const e of events) {
+      if (stopped()) return;
+      const rec = records.get(e);
+      if (rec) {
+        const pause = this.o.mode === 'practice' && rec.p === 1-this.me;
+        if (pause) this.el.querySelector('.ctrl').textContent = '상대 효과를 읽은 뒤 효과 읽기에서 계속을 누르세요.';
+        if (!await this.reader.show(rec, pause) || stopped()) return;
+      }
       const dupKO = e.t === 'move' && events.some(x => x.t === 'ko' && x.uid === e.uid);
       if (this.o.assist && e.by && !dupKO && (PT[e.t] || (e.t === 'move' && ['chars', 'stage'].includes(e.from) && e.uid !== e.by))) {
         const label = PT[e.t] ? PT[e.t](e) : ({ hand: '패로', trash: '트래시로', deck: '덱으로', life: '라이프로' }[e.to] || '이동');
         const tgt = e.uid; if (tgt && tgt !== e.by) await this.pointer(e.by, tgt, label, e.t === 'power' && e.amount > 0 ? '#3ddc97' : e.t === 'attach' || e.t === 'grant' ? '#ffb020' : '#ff7ad1', this.rects[tgt]);
       }
       if (e.t === 'log') { this.addLog(['수동 처리 완료', '수동 처리 확인'].includes(e.text) ? '미지원 단계 확인 (미적용)' : e.text, e.p); continue; }
-      if (e.t === 'ability') { await this.showAbility(e); continue; }
       if (e.t === 'attack') { await this.arrow(e.attacker, e.target, '#ff5d6c'); continue; }
       if (e.t === 'block') { await this.arrow(e.uid, e.attacker, '#3fb6ff', '블록!'); continue; }
       if (e.t === 'power' || e.t === 'counter') { this.floatAt(e.target || e.uid, (e.amount ?? 0) >= 0 ? `+${e.amount ?? ''}` : `${e.amount}`, (e.amount ?? 0) >= 0 ? 'var(--good)' : 'var(--bad)', e.set != null ? `원래 파워 ${e.set}` : null); this.stepHL('power'); await sleep(650 * sp); continue; }
@@ -462,32 +470,6 @@ export class Board {
     if (!text) return;
     const d = document.createElement('div'); d.className = p == null ? '' : 'p' + (p === this.me ? 0 : 1); d.textContent = text;
     this.logEl.appendChild(d); this.logEl.scrollTop = 1e9;
-  }
-  async showAbility(e) {
-    const c = this.C(e.no); if (!c) return;
-    const eff = E.effectsOf(this.db, e.no);
-    const ab = eff.abilities.find(a => a.src === e.src) || eff.abilities[0];
-    let ex = null; try { ex = ab ? explainAbility(ab, c) : null; } catch (err) { ex = null; }
-    const who = e.p === this.me ? '내' : '상대';
-    this.exEl.innerHTML = `<div class="head"><img src="${imgSrc(c)}"><div><div style="font-weight:700">${who} ${esc(c.name)}</div><div class="mut" style="font-size:12px">${esc(e.src || '')}</div></div></div>
-      ${ex ? `<div style="margin-top:8px;font-weight:600;font-size:13px">${glossify(easySentence(ex.sentence), this.db.glossary)}</div>${ex.steps.map((s, k) => `<div class="stp step" data-k="${k}"><div class="l">${esc(s.label)}</div><div>${glossify(easySentence(s.text), this.db.glossary)}</div></div>`).join('')}${ex.manual ? '<div class="warn">미지원 부분은 게임에 적용되지 않아요</div>' : ''}${this.o.assist ? tipsFor(ab, []).slice(0, 2).map(t => `<div class="pvtips" style="color:#ffd98a;font-size:12px;margin-top:4px">팁: ${esc(t)}</div>`).join('') : ''}` : ''}`;
-    // 보드 중앙 배너
-    const b = document.createElement('div'); b.className = 'banner';
-    b.innerHTML = `<img src="${imgBig(c)}"><div><div class="tt">${who} 카드 효과 발동 · ${esc(ex?.when || '')}</div><div class="ss">${esc(ex ? easySentence(ex.sentence) : e.src)}</div><div class="st">${esc(e.src || '')}</div><div class="hint">클릭하면 넘어가요</div></div>`;
-    this.el.appendChild(b);
-    const steps = [...this.exEl.querySelectorAll('.stp')];
-    const dur = (this.o.slow ? 3600 : 2100) * this.o.speed;
-    let skip = false, finish; const clicked = new Promise(r => { finish = r; });
-    b.onclick = e => { e.stopPropagation(); skip = true; finish(); };
-    const t0 = Date.now();
-    let k = 0;
-    while (Date.now() - t0 < dur && !skip) {
-      steps.forEach((s, j) => s.classList.toggle('on', j === k));
-      await Promise.race([sleep(Math.max(250, dur / Math.max(steps.length, 1))), clicked]);
-      k++; if (k >= steps.length) k = steps.length - 1;
-    }
-    steps.forEach(s => s.classList.add('on'));
-    b.remove();
   }
   stepHL() { }
   floatAt(uid, text, color, sub) {
@@ -613,9 +595,9 @@ export class LocalMatch {
     this.b = board; this.db = db; this.G = G; this.aiDelay = aiDelay; this.onEvents = onEvents; this.stopped = false;
     board.o.send = (a) => this.act(board.me, a);
   }
-  async start() { await this.b.update(this.G, this.G.events || []); this.loop(); }
+  async start() { const events = this.G.events || []; this.G.events = []; await this.b.update(this.G, events); this.loop(); }
   async act(p, a) {
-    if (this.stopped) return;
+    if (this.stopped || this.b.busy || this.b.destroyed) return;
     E.apply(this.G, this.db, p, a);
     const evs = this.G.events; this.G.events = [];
     this.onEvents && this.onEvents(a, evs, p);
@@ -628,12 +610,13 @@ export class LocalMatch {
       while (!this.stopped && this.G.winner === null) {
         let acted = false;
         for (const p of [0, 1]) {
-          if (!this.G.ai[p]) continue;
+          if (this.b.o.mode === 'practice' ? p !== 1-this.b.me : !this.G.ai[p]) continue;
           while (this.hold && !this.stopped) await sleep(150);
-          const a = E.aiStep(this.G, this.db, p);
+          if (this.stopped || this.b.destroyed) return;
+          const a = (this.b.o.opponentStep || E.aiStep)(this.G, this.db, p);
           if (!a) continue;
           await sleep(this.aiDelay * this.b.o.speed);
-          if (this.stopped) return;
+          if (this.stopped || this.b.destroyed) return;
           try { E.apply(this.G, this.db, p, a); }
           catch (err) {
             this.stopped = true; console.warn('AI action failed', a, err.message);
@@ -650,5 +633,5 @@ export class LocalMatch {
       }
     } finally { this.looping = false; }
   }
-  stop() { this.stopped = true; }
+  stop() { this.stopped = true; this.b.reader?.close(); }
 }
