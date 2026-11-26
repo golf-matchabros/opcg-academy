@@ -1,10 +1,10 @@
 // 대전 보드 UI: 상태 렌더 + 클릭 조작 + 효과 연출(이동/파워/어택 화살표/효과 해설 배너)
-import * as E from '../engine/core.js?v=202611261902';
-import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261902';
-import { easySentence, glossify } from './easy.js?v=202611261902';
-import { evalPlay, roleOf } from './coach.js?v=202611261902';
-import { EffectReader, collectEffects } from './effect-reader.js?v=202611261902';
-import { donArea, attachedDon } from './don.js?v=202611261902';
+import * as E from '../engine/core.js?v=202611261908';
+import { explainAbility, actionText, explainCard } from '../engine/explain.js?v=202611261908';
+import { easySentence, glossify } from './easy.js?v=202611261908';
+import { evalPlay, roleOf } from './coach.js?v=202611261908';
+import { EffectReader, collectEffects } from './effect-reader.js?v=202611261908';
+import { donArea, attachedDon } from './don.js?v=202611261908';
 
 const KW_LABEL = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐)', doubleAttack: '더블', banish: '배니시', unblockable: '블록불가' };
 const KW_TIP = { blocker: '블로커: 상대가 어택하면 이 캐릭터를 눕혀서 대신 막을 수 있어요', rush: '속공: 나온 턴에 바로 어택할 수 있어요', rushCharacter: '속공(캐릭터): 나온 턴에 상대 캐릭터만 어택할 수 있어요', doubleAttack: '더블 어택: 리더를 맞히면 라이프 2장', banish: '배니시: 맞은 라이프가 트래시로 (트리거 불가)', unblockable: '블록 불가: 블로커로 막을 수 없어요' };
@@ -70,7 +70,7 @@ export class Board {
     document.addEventListener('click', this._docClick = (e) => { if (this.menu && !this.menu.contains(e.target)) this.closeMenu(); }, true);
   }
   hideZoom() { if (this.zoomEl) this.zoomEl.style.display = 'none'; }
-  destroy() { this.destroyed = true; this.reader.close(); this.readerLayout.removeEventListener('change',this.placeReader); document.removeEventListener('click', this._docClick, true); this.closeMenu(); if (this.zoomEl) { this.zoomEl.remove(); this.zoomEl = null; } }
+  destroy() { this.destroyed = true; this.inspectDialog?.close(); this.reader.close(); this.readerLayout.removeEventListener('change',this.placeReader); document.removeEventListener('click', this._docClick, true); this.closeMenu(); if (this.zoomEl) { this.zoomEl.remove(); this.zoomEl = null; } }
   get me() { return this.o.me; }
   get observing() { return this.o.mode === 'demo' || !!this.G?.ai?.[this.me]; }
   C(no) { return this.db.cards.get(no); }
@@ -116,7 +116,7 @@ export class Board {
         if (kws.length) badges += `<div class="kw">${kws.map(k => `<span data-tip="${esc(KW_TIP[k] || '')}">${KW_LABEL[k]}</span>`).join('')}</div>`;
       }
       const locked = this.busy || this.sending || (pend && !optSet.has(uid)) || (this.sel && !optSet.has(uid) && !atkTargets.has(uid));
-      return `<button type="button" ${locked ? 'disabled' : ''} class="${cls}" data-uid="${uid}" aria-label="${esc(c.name)}" title="${esc(c.name)}"><img alt="" src="${imgSrc(c)}" data-src2="${c.src}" loading="lazy">${badges}${this.coachTags(uid)}${extra}</button>`;
+      return `<button type="button" ${locked && !(onField && i.owner===op) ? 'disabled' : ''} class="${cls}" data-uid="${uid}" aria-label="${esc(c.name)}" title="${esc(c.name)}"><img alt="" src="${imgSrc(c)}" data-src2="${c.src}" loading="lazy">${badges}${this.coachTags(uid)}${extra}</button>`;
     };
     const lifeHtml = (P, p) => `<div class="life" data-pile="life${p}" data-tip="라이프: 리더가 맞으면 1장씩 손패로 가요. 0장일 때 한 번 더 맞으면 패배!"><div class="stack">${P.life.map((l, k) => `<div class="lc" style="top:${k * 8}px" data-life="${p}"></div>`).join('')}</div><div class="num">${P.life.length}</div><div class="zlabel">라이프</div></div>`;
     const fieldSlot = uid => {
@@ -515,9 +515,24 @@ export class Board {
     if (a === 'cancel') { this.sel = null; this.render(); return; }
     if (m[a]) this.send(m[a]);
   }
-  onClick(e) {
+  inspectOpponent(uid,node) {
+    const card=this.cardOf(uid); if (!card || this.inspectDialog?.open) return;
+    const d=document.createElement('dialog'); d.className='opponent-inspect'; this.inspectDialog=d;
+    const revision=this.revision, pending=this.G.pending, selection=this.sel;
+    const choice=this.busy||this.sending||this.observing ? '' : selection?.mode==='attack' && E.attackTargets(this.G,this.db,selection.uid).includes(uid) ? '이 카드를 공격' : pending?.p===this.me && ['target','search'].includes(pending.type) && pending.options.includes(uid) ? (this.picks.includes(uid)?'대상 선택 해제':'이 카드를 대상으로 선택') : '';
+    d.setAttribute('aria-label','상대 카드 확대');d.innerHTML='<header><div><small>상대 카드</small><h3></h3></div><button autofocus>닫기</button></header><img><div class="inspect-text"></div>';
+    d.querySelector('h3').textContent=card.name+' · '+card.no; const im=d.querySelector('img'); im.src=imgBig(card); im.alt=card.name; imgFallback(im,card);
+    d.querySelector('.inspect-text').textContent=[card.text,card.trigger].filter(Boolean).join('\n');
+    d.querySelector('button').onclick=()=>d.close(); d.onclick=e=>{if(e.target===d && !(e.clientX>=d.getBoundingClientRect().left && e.clientX<=d.getBoundingClientRect().right && e.clientY>=d.getBoundingClientRect().top && e.clientY<=d.getBoundingClientRect().bottom)) d.close();};
+    if(choice){const b=document.createElement('button');b.className='pri';b.textContent=choice;b.onclick=()=>{d.close();if(revision===this.revision && this.G.pending===pending && this.sel===selection && node.isConnected)this.onClick({target:node},true);};d.append(b);}
+    d.addEventListener('close',()=>{d.remove();if(this.inspectDialog===d)this.inspectDialog=null;},{once:true});document.body.append(d);d.showModal();
+  }
+  onClick(e,confirmed=false) {
     this.hideZoom();
     const n = e.target.closest('[data-uid]');
+    if (!confirmed && !this.destroyed && n?.closest('.side.opp') && this.G) {
+      const u=n.dataset.uid, o=this.G.players[1-this.me];if((u===o.leader||u===o.stage||o.chars.includes(u)) && !this.G.cards[u]?.hidden){this.inspectOpponent(u,n);return;}
+    }
     if (e.target.closest('.ctrl button:not([data-uid])') || this.destroyed || this.sending || this.busy) return;
     if (!n || !n.dataset.uid || !this.G || this.busy) { if (e.target.closest('[data-trash]')) this.showTrash(+e.target.closest('[data-trash]').dataset.trash); return; }
     const uid = n.dataset.uid; const G = this.G; const me = this.me;
