@@ -40,7 +40,7 @@ export function expandDeck(deck) {
   for (const { no, count } of deck.cards) for (let i = 0; i < count; i++) list.push(no);
   return list;
 }
-export function createGame({ decks, names = ['나', '상대'], seed = Date.now() % 2147483647, first = 0, ai = [false, true], sandbox = true }, db) {
+export function createGame({ decks, names = ['나', '상대'], seed = Date.now() % 2147483647, first = 0, orderChooser = first, ai = [false, true], sandbox = false }, db) {
   const G = {
     v: 1, seed, rngState: seed, turn: 0, active: first, first, phase: 'mulligan', winner: null, loseReason: null,
     players: [], cards: {}, nextUid: 1, mods: [], used: {}, queue: [], pending: null, battle: null,
@@ -50,13 +50,36 @@ export function createGame({ decks, names = ['나', '상대'], seed = Date.now()
     const d = decks[p];
     const P = { name: names[p], leader: null, chars: [], stage: null, hand: [], deck: [], trash: [], life: [], donDeck: 10, donActive: 0, donRested: 0, mull: false };
     G.players.push(P);
-    P.leader = mk(G, d.leader, p);
+    P.leader = mk(G, d.leader, p); G.cards[P.leader].zone = 'leader';
+    P.turnsTaken = 0;
+    const leader = db.cards.get(d.leader);
+    if ((leader?.base || d.leader) === 'OP15-058') P.donDeck = 6;
     P.deck = shuffle(G, expandDeck(d).map(no => mk(G, no, p)));
   }
-  for (let p = 0; p < 2; p++) drawN(G, db, p, 5, true);
-  G.pending = { type: 'mulligan', p: first, text: '첫 패 5장을 다시 뽑을까요? (한 번만 가능)' };
+  // Q973/974: order chooser (not necessarily the first player) resolves Im first.
+  if (orderChooser !== 0 && orderChooser !== 1) throw Error('선후공을 결정한 플레이어가 올바르지 않아요');
+  G.imSetup = [orderChooser, opp(orderChooser)].filter(p => leaderBaseNo(G, db, p) === 'OP13-079');
+  nextImOrDeal(G, db);
   log(G, `${G.players[first].name} 선공으로 게임 시작`);
   return G;
+}
+function leaderBaseNo(G, db, p) {
+  const c = def(G, db, G.players[p].leader); return c?.base || c?.no;
+}
+function nextImOrDeal(G, db) {
+  while (G.imSetup.length) {
+    const p = G.imSetup.shift();
+    const options = G.players[p].deck.filter(u => {
+      const c = def(G, db, u); return c?.type === 'stage' && c.traits?.includes('성지 마리조아');
+    }).sort(); // Do not expose deck order or unrelated cards, even to the chooser.
+    if (!options.length) continue;
+    G.pending = { type: 'search', key: 'imSetup', p, options, looked: [...options], min: 0, max: 1,
+      text: '게임 개시 시: 덱의 《성지 마리조아》 스테이지를 1장까지 등장시킬 수 있어요.' };
+    return;
+  }
+  delete G.imSetup;
+  for (let p = 0; p < 2; p++) drawN(G, db, p, 5, true);
+  G.pending = { type: 'mulligan', p: G.first, text: '첫 패 5장을 다시 뽑을까요? (한 번만 가능)' };
 }
 // 레슨/효과 시연용: 정해진 장면으로 게임 생성
 // spec = { players:[{ name, leader, chars:[no|{no,rested,don,fresh}], stage, hand:[no], deck:[no], life:n|[no], trash:[no], donActive, donRested, donDeck }], active, turn, ai:[b,b], sandbox, seed }
@@ -64,7 +87,7 @@ export function createScenario(spec, db) {
   const G = {
     v: 1, seed: spec.seed || 7, rngState: spec.seed || 7, turn: spec.turn ?? 3, active: spec.active ?? 0, first: 0, phase: spec.phase || 'main', winner: null, loseReason: null,
     players: [], cards: {}, nextUid: 1, mods: [], used: {}, queue: [], pending: null, battle: null, events: [], evSeq: 0,
-    sandbox: spec.sandbox ?? true, ai: spec.ai || [false, true], scenario: true,
+    sandbox: spec.sandbox ?? false, ai: spec.ai || [false, true], scenario: true,
   };
   const filler = spec.filler || 'OP01-006';
   for (let p = 0; p < 2; p++) {
@@ -332,12 +355,13 @@ export function evalCond(G, db, c, ctx) {
     lifeLessThanOpp: () => P.life.length < O.life.length,
     leaderPowerAtLeast: v => power(G, db, P.leader) >= v,
   };
-  let result = true, known = false;
+  let result = true, known = false, unknown = false;
   for (const k of Object.keys(c)) {
     if (k === 'raw') continue;
     if (checks[k]) { known = true; if (!checks[k](c[k])) result = false; }
+    else unknown = true;
   }
-  if (!known) return 'unknown';
+  if (!known || (result && unknown)) return 'unknown';
   return result;
 }
 
@@ -369,6 +393,13 @@ function fireEvt(G, db, timing, pred) {
 const sideOk = (e, owner, subject) => !e.side || e.side === 'both' || e.side === 'any' || (e.side === 'self' ? owner === subject : owner !== subject);
 function abilityKey(uid, ab) { return uid + '|' + (ab.src || '').slice(0, 40); }
 
+function unsupportedStep(G, ctx, text) {
+  if (G.sandbox !== true) ctx.prevDone = false;
+  if (G.ai[ctx.p]) { log(G, 'AI: 미지원 효과를 적용하지 않고 건너뜀: ' + text, ctx.p); return; }
+  G.pending = { type: 'manual', p: ctx.p, text, src: ctx.src };
+  ev(G, { t: 'manual', p: ctx.p, uid: ctx.src, text });
+  return 'wait';
+}
 function startAbility(G, db, item) {
   const { ab, ctx } = item;
   const key = abilityKey(ctx.src, ab);
@@ -378,6 +409,7 @@ function startAbility(G, db, item) {
   if (ab.condition) {
     const v = evalCond(G, db, ab.condition, ctx);
     if (v === false) { log(G, `${nm(G, db, ctx.src)} 효과 조건 불충족`, ctx.p); return; }
+    if (v === 'unknown' && G.sandbox !== true) return unsupportedStep(G, ctx, '엔진이 확인하지 못한 발동 조건: ' + (ab.condition.raw || ab.src));
     if (v === 'unknown' && !item.condOk) {
       if (G.ai[ctx.p]) { /* AI는 만족으로 간주 */ }
       else { item.condOk = true; pushFront(G, [item]); G.pending = { type: 'yesno', p: ctx.p, text: `조건 확인: "${ab.condition.raw || '조건'}" 을(를) 만족하나요?`, key: 'cond', src: ctx.src }; return 'wait'; }
@@ -395,8 +427,15 @@ function startAbility(G, db, item) {
   if (ab.oncePerTurn) G.used[key] = G.turn;
   ev(G, { t: 'ability', uid: ctx.src, no: ctx.no, p: ctx.p, timing: ab.timing, src: ab.src });
   log(G, `${nm(G, db, ctx.src)} 효과 발동`, ctx.p);
-  const steps = [...(ab.cost || []).map(a => ({ a, ctx, isCost: true })), ...(ab.steps || []).map(a => ({ a, ctx }))];
-  pushFront(G, steps);
+  pushFront(G, abilitySteps(G, db, ab, ctx));
+}
+// Unknown future cost operations must not fall through to an unpaid reward.
+const COST_OPS = new Set(['discard', 'power', 'rest', 'toDeckBottom', 'toTrash', 'bounce', 'returnDon', 'lifeFace', 'trashToDeck', 'trashFromDeckTop', 'lifeToHand', 'restDon', 'trashLife', 'attachDon', 'handToDeck', 'ko', 'revealFromHand']);
+function abilitySteps(G, db, ab, ctx) {
+  // Acknowledging an unsupported cost cannot pay it or unlock its reward.
+  const unsupported = ab.cost?.find(a => !COST_OPS.has(a.do) || (a.condition && evalCond(G, db, a.condition, ctx) !== true));
+  if (G.sandbox !== true && unsupported) return [{ a: { do: 'manual', text: unsupported.text || ab.src }, ctx }];
+  return [...(ab.cost || []).map(a => ({ a, ctx, isCost: true })), ...(ab.steps || []).map(a => ({ a, ctx }))];
 }
 export function canPay(G, db, cost, ctx) {
   const P = G.players[ctx.p];
@@ -495,6 +534,7 @@ function execAction(G, db, item) {
   if (a.condition && !item.condChecked) {
     const v = evalCond(G, db, a.condition, ctx);
     if (v === false) return;
+    if (v === 'unknown' && G.sandbox !== true) return unsupportedStep(G, ctx, '엔진이 확인하지 못한 효과 조건: ' + (a.condition.raw || ctx.abText));
     if (v === 'unknown' && !G.ai[ctx.p]) { item.condChecked = true; pushFront(G, [item]); G.pending = { type: 'yesno', p: ctx.p, text: `조건 확인: "${a.condition.raw || '조건'}" 을(를) 만족하나요?`, key: 'stepCond', src: ctx.src }; return 'wait'; }
     item.condChecked = true;
   }
@@ -536,7 +576,7 @@ function execAction(G, db, item) {
     case 'activateAbilityOf': {
       const e = effectsOf(db, G.cards[ctx.src].no);
       const m = e.abilities.find(x => x.timing === (a.timing || 'main'));
-      if (m) pushFront(G, [...(m.cost || []).map(s => ({ a: s, ctx, isCost: true })), ...(m.steps || []).map(s => ({ a: s, ctx }))]);
+      if (m && canPay(G, db, m.cost || [], ctx)) pushFront(G, abilitySteps(G, db, m, ctx));
       return;
     }
     case 'draw': drawN(G, db, a.side === 'opp' ? opp(ctx.p) : ctx.p, a.n || 1); return;
@@ -588,12 +628,15 @@ function execAction(G, db, item) {
     }
     case 'attachDon': {
       const s = tgt(); if (s === 'wait') return 'wait';
+      const pool = a.state === 'active' ? 'donActive' : 'donRested';
+      ctx.prevDone = false;
       for (const u of s) {
-        let k = a.n || 1;
-        const fromRested = a.state !== 'active';
-        while (k > 0 && (fromRested ? P.donRested : P.donActive) > 0) { fromRested ? P.donRested-- : P.donActive--; G.cards[u].don++; k--; }
-        while (k > 0 && (fromRested ? P.donActive : P.donRested) > 0) { fromRested ? P.donActive-- : P.donRested--; G.cards[u].don++; k--; }
+        if (u !== P.leader && !P.chars.includes(u)) continue;
+        const n = Math.min(a.n || 1, P[pool]);
+        if (!n) continue;
+        P[pool] -= n; G.cards[u].don += n; ctx.prevDone = true;
         ev(G, { t: 'attach', uid: u, don: G.cards[u].don });
+        fireEvt(G, db, 'onDonAttached', (e, x, o) => o === ctx.p);
       }
       return;
     }
@@ -674,18 +717,13 @@ function execAction(G, db, item) {
     case 'activateMainOf': {
       const e = effectsOf(db, G.cards[ctx.src].no);
       const m = e.abilities.find(x => x.timing === 'main');
-      if (m) pushFront(G, (m.steps || []).map(s => ({ a: s, ctx })));
+      if (m && canPay(G, db, m.cost || [], ctx)) pushFront(G, abilitySteps(G, db, m, ctx));
       return;
     }
-    case 'manual': {
-      if (G.ai[ctx.p]) { log(G, `AI: 자동 처리 안 되는 효과는 건너뜀 - "${(a.text || '').slice(0, 60)}"`, ctx.p); return; }
-      G.pending = { type: 'manual', p: ctx.p, text: a.text || ctx.abText, src: ctx.src };
-      ev(G, { t: 'manual', p: ctx.p, uid: ctx.src, text: a.text });
-      return 'wait';
+    case 'manual':
+    default: {
+      return unsupportedStep(G, ctx, a.text || a.src || ctx.abText || JSON.stringify(a));
     }
-    default:
-      if (!G.ai[ctx.p]) { G.pending = { type: 'manual', p: ctx.p, text: a.src || a.text || ctx.abText || JSON.stringify(a), src: ctx.src }; return 'wait'; }
-      return;
   }
 }
 function weakestChar(G, db, p) {
@@ -722,6 +760,10 @@ export function koCard(G, db, uid, why, byP = null) {
 function startTurn(G, db) {
   G.turn++;
   const p = G.active; const P = G.players[p];
+  // Q952: only DON!! already on this player's field at the start of this turn counts.
+  const rogerHadDon = leaderBaseNo(G, db, p) === 'OP13-003' &&
+    (P.donActive > 0 || P.donRested > 0 || fieldUids(G, p).some(u => G.cards[u].don > 0));
+  if (P.turnsTaken !== undefined) P.turnsTaken++;
   G.phase = 'refresh';
   // 리프레시: 붙은 두웅!! 회수 후 전부 액티브
   for (const u of fieldUids(G, p)) { P.donRested += G.cards[u].don; G.cards[u].don = 0; if (!G.mods.some(m => m.target === u && m.kind === 'grant' && m.value === 'skipNextRefresh')) G.cards[u].rested = false; }
@@ -733,8 +775,15 @@ function startTurn(G, db) {
   if (G.turn > 1) drawN(G, db, p, 1);
   if (G.winner !== null) return;
   G.phase = 'don';
-  const k = Math.min(G.turn === 1 ? 1 : 2, P.donDeck); P.donDeck -= k; P.donActive += k;
+  const k = Math.min(G.turn === 1 ? 1 : 2, P.donDeck); P.donDeck -= k;
+  const attach = k > 0 && rogerHadDon && !isNegated(G, P.leader) ? 1 : 0;
+  P.donActive += k - attach;
   ev(G, { t: 'don', p, add: k, state: 'active' });
+  if (attach) {
+    const leader = G.cards[P.leader]; leader.don++;
+    ev(G, { t: 'attach', uid: P.leader, don: leader.don });
+    fireEvt(G, db, 'onDonAttached', (e, x, o) => o === p);
+  }
   G.phase = 'main';
 }
 function endTurn(G, db) {
@@ -764,9 +813,10 @@ function placeLife(G, db) {
 
 // ---------- 배틀 ----------
 export function canAttack(G, db, uid) {
-  const c = G.cards[uid]; const p = c.owner;
+  const c = G.cards[uid]; if (!c) return false;
+  const p = c.owner;
   if (G.phase !== 'main' || G.active !== p || G.pending || G.queue.length || G.battle) return false;
-  if (G.turn <= 2) return false;
+  if (G.players[p].turnsTaken !== undefined ? G.players[p].turnsTaken <= 1 : G.turn <= 2) return false;
   if (c.rested) return false;
   const z = zoneOf(G, uid);
   if (z !== 'leader' && z !== 'chars') return false;
@@ -894,9 +944,9 @@ function battleEnd(G, db) {
 
 // ---------- 플레이어 액션 ----------
 export function legalMain(G, db, p) {
-  const out = { play: [], attack: [], activate: [], attachDon: G.players[p].donActive > 0 };
+  const out = { play: [], attack: [], activate: [], attachDon: false };
   if (G.phase !== 'main' || G.active !== p || G.pending || G.queue.length || G.battle) return out;
-  const P = G.players[p];
+  const P = G.players[p]; out.attachDon = P.donActive > 0;
   for (const u of P.hand) {
     const c = def(G, db, u);
     if (costOf(G, db, u) > P.donActive) continue;
@@ -905,7 +955,7 @@ export function legalMain(G, db, p) {
   }
   for (const u of fieldUids(G, p)) {
     if (canAttack(G, db, u)) out.attack.push(u);
-    effectsOf(db, G.cards[u].no).abilities.forEach((ab, i) => { if ((ab.timing === 'activateMain' || isManualEventTiming(ab.timing)) && canActivate(G, db, u, ab, p)) out.activate.push({ uid: u, i, event: ab.timing !== 'activateMain' }); });
+    effectsOf(db, G.cards[u].no).abilities.forEach((ab, i) => { if ((ab.timing === 'activateMain' || (G.sandbox === true && isManualEventTiming(ab.timing))) && canActivate(G, db, u, ab, p)) out.activate.push({ uid: u, i, event: ab.timing !== 'activateMain' }); });
   }
   return out;
 }
@@ -919,11 +969,14 @@ function canActivate(G, db, uid, ab, p) {
 }
 
 export function apply(G, db, p, action) {
+  const previousEvents = G.events;
   G.events = [];
   if (G.winner !== null) return G;
   const P = G.players[p];
   const pend = G.pending;
-  const need = (cond, msg) => { if (!cond) throw new Error(msg); };
+  const need = (cond, msg) => { if (!cond) { G.events = previousEvents; throw new Error(msg); } };
+  need(p === 0 || p === 1, '알 수 없는 플레이어');
+  need(typeof action?.type === 'string', '알 수 없는 명령');
   switch (action.type) {
     case 'mulligan': {
       need(pend && pend.type === 'mulligan' && pend.p === p, '지금은 멀리건 차례가 아니에요');
@@ -937,12 +990,14 @@ export function apply(G, db, p, action) {
     case 'play': {
       need(legalMain(G, db, p).play.includes(action.uid), '지금 낼 수 없는 카드예요');
       const c = def(G, db, action.uid); const k = costOf(G, db, action.uid);
+      if (c.type === 'character' && P.chars.length >= MAX_CHARS) {
+        need(action.replace ? P.chars.includes(action.replace) : G.ai[p], '내 필드에서 교체할 캐릭터를 지정하세요');
+      }
       P.donActive -= k; P.donRested += k;
       if (c.type === 'character') {
         if (P.chars.length >= MAX_CHARS) {
           if (action.replace) moveCard(G, db, action.replace, 'trash');
-          else if (G.ai[p]) moveCard(G, db, weakestChar(G, db, p), 'trash');
-          else { P.donActive += k; P.donRested -= k; throw new Error('캐릭터는 5장까지예요. 트래시로 보낼 캐릭터를 replace 로 지정하세요'); }
+          else moveCard(G, db, weakestChar(G, db, p), 'trash');
         }
         moveCard(G, db, action.uid, 'chars');
         log(G, `${nm(G, db, action.uid)} 등장 (코스트 ${k})`, p);
@@ -961,18 +1016,19 @@ export function apply(G, db, p, action) {
       break;
     }
     case 'attachDon': {
-      need(G.phase === 'main' && G.active === p && !pend && !G.battle, '지금은 두웅!!을 붙일 수 없어요');
+      need(G.phase === 'main' && G.active === p && !pend && !G.queue.length && !G.battle, '지금은 두웅!!을 붙일 수 없어요');
       need(P.donActive > 0, '액티브 두웅!!이 없어요');
       need([P.leader, ...P.chars].includes(action.uid), '내 리더/캐릭터에만 붙일 수 있어요');
-      const n = Math.min(action.n || 1, P.donActive);
+      const n = action.n === undefined ? 1 : action.n;
+      need(Number.isSafeInteger(n) && n >= 1 && n <= P.donActive, '붙일 두웅!! 수량은 현재 액티브 장수 이내의 양의 정수여야 해요');
       P.donActive -= n; G.cards[action.uid].don += n;
       ev(G, { t: 'attach', uid: action.uid, don: G.cards[action.uid].don, now: power(G, db, action.uid) });
       fireEvt(G, db, 'onDonAttached', (e, x, o) => o === p);
       break;
     }
     case 'activate': {
+      need(legalMain(G, db, p).activate.some(x => x.uid === action.uid && x.i === action.i), '지금 발동할 수 없어요');
       const ab = effectsOf(db, G.cards[action.uid].no).abilities[action.i];
-      need(ab && legalMain(G, db, p).activate.some(x => x.uid === action.uid && x.i === action.i), '지금 발동할 수 없어요');
       fireAbility(G, db, action.uid, ab, p);
       break;
     }
@@ -990,14 +1046,16 @@ export function apply(G, db, p, action) {
     }
     case 'block': {
       need(pend && pend.type === 'block' && pend.p === p, '블록 차례가 아니에요');
+      need(!action.uid || pend.options.includes(action.uid), '블록할 수 없는 카드');
       G.pending = null;
-      if (action.uid) { need(pend.options.includes(action.uid), '블록할 수 없는 카드'); doBlock(G, db, action.uid); }
+      if (action.uid) doBlock(G, db, action.uid);
       break;
     }
     case 'counter': {
       need(pend && pend.type === 'counter' && pend.p === p, '카운터 차례가 아니에요');
       if (!action.uid) { G.pending = null; break; }
       need(pend.options.includes(action.uid), '사용할 수 없는 카드');
+      need(!action.target || action.target === G.battle.target, '어택 대상만 카운터로 강화할 수 있어요');
       G.pending = null;
       G.queue.unshift({ sys: 'counterStep' });
       useCounter(G, db, p, action.uid, action.target);
@@ -1020,28 +1078,34 @@ export function apply(G, db, p, action) {
     }
     case 'option': {
       need(pend && pend.type === 'option' && pend.p === p, '고를 차례가 아니에요');
-      G.pending = null; G.queue[0].choice = Math.max(0, Math.min(pend.options.length - 1, action.index | 0));
+      need(Number.isSafeInteger(action.index) && action.index >= 0 && action.index < pend.options.length, '제시된 선택지만 고를 수 있어요');
+      G.pending = null; G.queue[0].choice = action.index;
       break;
     }
     case 'choose': {
       need(pend && ['target', 'search'].includes(pend.type) && pend.p === p, '고를 차례가 아니에요');
-      const sel = (action.uids || []).filter(u => pend.options.includes(u));
+      const sel = action.uids ?? [];
+      need(Array.isArray(sel) && new Set(sel).size === sel.length && sel.every(u => pend.options.includes(u)), '제시된 카드 중 서로 다른 대상만 골라야 해요');
       need(sel.length >= (pend.min || 0) && sel.length <= pend.max, `${pend.min}~${pend.max}장 골라야 해요`);
+      if (pend.key === 'imSetup') {
+        if (sel.length) { moveCard(G, db, sel[0], 'stage'); shuffle(G, P.deck); }
+        G.pending = null; nextImOrDeal(G, db); break;
+      }
       G.pending = null; G.queue[0].sel = sel;
       break;
     }
     case 'manualDone': {
       need(pend && pend.type === 'manual' && pend.p === p, '수동 처리 중이 아니에요');
-      G.pending = null; log(G, '수동 처리 완료', p);
+      G.pending = null; log(G, G.sandbox === true ? '수동 처리 확인' : '미지원 효과 확인: 해당 단계는 적용하지 않고 건너뜀', p);
       break;
     }
     case 'manual': {
-      need(G.sandbox || (pend && pend.type === 'manual' && pend.p === p), '수동 도구는 효과 처리 중에만 쓸 수 있어요');
+      need(G.sandbox === true, '일반 대전에서는 수동 조작을 할 수 없어요');
       manualOp(G, db, p, action);
       break;
     }
     case 'concede': lose(G, p, '항복'); return G;
-    default: throw new Error('알 수 없는 액션 ' + action.type);
+    default: need(false, '알 수 없는 액션 ' + action.type);
   }
   runQueue(G, db);
   return G;
@@ -1087,13 +1151,20 @@ export function viewFor(G, p) {
   V.players[o].deck = V.players[o].deck.map(() => 'hidden');
   V.players[p].deck = V.players[p].deck.map(() => 'hidden');
   for (const P of V.players) P.life = P.life.map(l => l.faceUp ? l : { uid: 'hidden', faceUp: false });
+  const pending = G.pending;
+  const choiceCards = new Set();
+  if (pending?.p === p) {
+    if (pending.type === 'search') for (const u of pending.looked || []) choiceCards.add(u);
+    if (pending.type === 'target') for (const u of pending.options) if (G.cards[u]?.owner === p) choiceCards.add(u);
+    if (pending.type === 'trigger') choiceCards.add(pending.uid);
+  }
   for (const uid of Object.keys(V.cards)) {
     const c = V.cards[uid];
-    const visible = ['chars', 'stage', 'trash', 'leader'].includes(c.zone) || (c.zone === 'hand' && c.owner === p) || G.players[c.owner].leader === uid;
+    const visible = choiceCards.has(uid) || ['chars', 'stage', 'trash', 'leader'].includes(c.zone) || (c.zone === 'hand' && c.owner === p) || G.players[c.owner].leader === uid;
     if (!visible) V.cards[uid] = { uid, owner: c.owner, zone: c.zone, hidden: true };
   }
   V.rngState = 0; V.queue = V.queue.length ? [{ hidden: true }] : [];
-  if (V.pending && V.pending.type === 'search' && V.pending.p !== p) V.pending = { type: V.pending.type, p: V.pending.p, text: '상대가 선택 중' };
+  if (V.pending && ['search', 'target', 'counter', 'trigger'].includes(V.pending.type) && V.pending.p !== p) V.pending = { type: V.pending.type, p: V.pending.p, text: '상대가 선택 중' };
   return V;
 }
 

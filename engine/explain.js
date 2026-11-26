@@ -187,7 +187,7 @@ export function actionText(a) {
     case 'playerRestriction': s = `${dur}제한: "${a.text}"`; break;
     case 'rule': s = `덱 규칙: ${a.text}`; break;
     case 'choose': s = '아래 중 하나를 골라요: ' + a.options.map((o, i) => `(${i + 1}) ${o.map(actionText).join(', ')}`).join(' / '); break;
-    case 'manual': s = `직접 처리해요: "${a.text}"`; break;
+    case 'manual': s = `미지원 효과: "${a.text}"`; break;
     default: s = JSON.stringify(a);
   }
   if (a.at === 'endOfThisTurn') s = '이번 턴이 끝날 때 ' + s;

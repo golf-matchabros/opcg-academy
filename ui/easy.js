@@ -13,7 +13,7 @@ const SWAP = [
 ];
 export function easyKo(t) { let s = String(t || ''); for (const [a, b] of SWAP) s = s.replace(a, b); return s; }
 export function easySentence(sentence) {
-  return String(sentence || '').replace(/직접 처리해요: "([^"]+)"/g, (m, x) => `직접 처리해요: "${easyKo(x)}"`);
+  return String(sentence || '').replace(/미지원 효과: "([^"]+)"/g, (m, x) => `미지원 효과: "${easyKo(x)}"`);
 }
 
 // 용어 툴팁: 텍스트 안의 용어에 점선 밑줄 + 마우스 올리면 뜻
@@ -45,7 +45,7 @@ export function tipsFor(ab, keywords = []) {
     if (s.do === 'search') tips.add('덱에서 필요한 카드를 찾아오는 효과예요');
     if (s.do === 'addDon' || s.do === 'attachDon') tips.add('두웅!!이 늘면 더 비싼 카드를 내거나 파워를 올릴 수 있어요');
     if (s.do === 'returnDon') tips.add(opp ? '상대 두웅!!이 줄어서 다음 턴에 할 수 있는 게 줄어요' : '두웅!!을 덱으로 돌려보내는 대가를 치르는 거예요');
-    if (s.do === 'manual') tips.add('이 부분은 자동으로 안 돼요. 카드를 눌러 "수동 조작"으로 직접 처리해요');
+    if (s.do === 'manual') tips.add('이 부분은 지원하지 않아서 게임 상태에 반영되지 않아요');
   }
   if (ab?.timing === 'trigger') tips.add('【트리거】: 내가 대미지를 받아 라이프에서 이 카드가 나오면, 손으로 가져가는 대신 공짜로 효과를 쓸 수 있어요');
   if (ab?.timing === 'counter') tips.add('【카운터】 이벤트: 상대 턴에 내가 어택당했을 때만 쓸 수 있어요');

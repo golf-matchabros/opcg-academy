@@ -1,12 +1,15 @@
 // 앱: 라우터 + 카드 사전 + 덱 + 연습 대전 + 효과 시연 + 튜토리얼 + 온라인 대전
-import * as E from '../engine/core.js?v=202611261818';
-import { explainCard } from '../engine/explain.js?v=202611261818';
-import { validateDeck } from '../engine/rules.js?v=202611261818';
-import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261818';
-import { easySentence, glossify, tipsFor } from './easy.js?v=202611261818';
+import * as E from '../engine/core.js?v=202611261836';
+import { newOpening, applyOpening, openingView, HANDS } from '../engine/opening.js?v=202611261836';
+import { drawOpening } from './opening.js?v=202611261836';
+import { explainCard } from '../engine/explain.js?v=202611261836';
+import { validateDeck } from '../engine/rules.js?v=202611261836';
+import { Board, LocalMatch, imgSrc, imgBig } from './board.js?v=202611261836';
+import { easySentence, glossify, tipsFor } from './easy.js?v=202611261836';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const leaderLabels = nos => (nos || []).map(no=>{const c=db.cards.get(no); return c ? `${c.name} (${c.no})` : '리더';});
 const COLOR_KO = { red: '적', green: '녹', blue: '청', purple: '자', black: '흑', yellow: '황' };
 const TYPE_KO = { leader: '리더', character: '캐릭터', event: '이벤트', stage: '스테이지' };
 const dots = cs => cs.map(c => `<span class="dot c-${c}"></span>`).join('');
@@ -17,7 +20,7 @@ let current = null; // 현재 화면 정리 함수
 
 async function boot() {
   const [cards, effects, decks, glossary, reg, lessons] = await Promise.all([
-    getJSON('data/cards.json?v=202611261818', []), getJSON('data/effects.json?v=202611261818', {}), getJSON('data/decks.json?v=202611261818', []), getJSON('data/glossary.json?v=202611261818', {}), getJSON('data/regulation.json?v=202611261818', {}), getJSON('data/lessons.json?v=202611261818', []),
+    getJSON('data/cards.json?v=202611261836', []), getJSON('data/effects.json?v=202611261836', {}), getJSON('data/decks.json?v=202611261836', []), getJSON('data/glossary.json?v=202611261836', {}), getJSON('data/regulation.json?v=202611261836', {}), getJSON('data/lessons.json?v=202611261836', []),
   ]);
   const ord = c => { const m = c.no.match(/^([A-Z]+)(\d+)-(\d+)/); if (!m) return [9, 0, 0]; const t = { OP: 0, EB: 1, ST: 2, PRB: 3, P: 4 }[m[1]] ?? 5; return [t, -(+m[2]), +m[3]]; };
   cards.sort((a, b) => { const x = ord(a), y = ord(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.no.localeCompare(b.no); });
@@ -64,7 +67,7 @@ function pageHome(main) {
     <h2>데이터 현황</h2>
     <table class="simple" style="max-width:640px">
       <tr><td>한글판 카드</td><td>${db.list.length.toLocaleString()}장 (기본 ${db.bases.length.toLocaleString()}종 + 패러렐)</td></tr>
-      <tr><td>효과 구조화</td><td>${Object.keys(db.effects).length.toLocaleString()}종 · 완전 자동 처리 ${full.toLocaleString()}종 (나머지는 수동 처리 도구로 플레이)</td></tr>
+      <tr><td>효과 구조화</td><td>${Object.keys(db.effects).length.toLocaleString()}종 · 완전 자동 처리 ${full.toLocaleString()}종 (미지원 효과는 적용하지 않음)</td></tr>
       <tr><td>덱</td><td>${db.decks.length}개</td></tr>
       <tr><td>레귤레이션</td><td>${esc(db.reg.name || '')} · 금지 ${db.reg.banned?.length || 0}종 · 금지 페어 ${db.reg.pairs?.length || 0}쌍</td></tr>
     </table>`;
@@ -82,7 +85,7 @@ function pageCards(main, arg) {
       <select id="type"><option value="">모든 종류</option>${Object.entries(TYPE_KO).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
       <select id="cost"><option value="">코스트</option>${[...Array(11).keys()].map(i => `<option>${i}</option>`).join('')}</select>
       <select id="set" style="max-width:240px"><option value="">모든 상품</option>${sets.map(s => `<option>${esc(s)}</option>`).join('')}</select>
-      <select id="auto"><option value="">자동 처리 전체</option><option value="full">완전 자동</option><option value="part">수동 포함</option></select>
+      <select id="auto"><option value="">자동 처리 전체</option><option value="full">완전 자동</option><option value="part">미지원 부분 있음</option></select>
       <select id="base"><option value="1">기본 카드만</option><option value="">패러렐 포함</option></select>
     </div>
     <div class="mut" id="cnt"></div><div class="grid" id="grid" style="margin-top:10px"></div><div class="pager" id="pager"></div>`;
@@ -104,7 +107,7 @@ function pageCards(main, arg) {
     $('#cnt').textContent = `${list.length.toLocaleString()}장`;
     $('#grid').innerHTML = list.slice(cardState.page * per, (cardState.page + 1) * per).map(c => {
       const cov = E.effectsOf(db, c.no).coverage ?? 0;
-      return `<div class="cthumb" data-no="${c.no}"><img loading="lazy" src="${imgSrc(c)}" data-src2="${c.src}"><div class="cov" style="color:${cov >= .999 ? 'var(--good)' : 'var(--acc)'}">${cov >= .999 ? '자동' : '수동 포함'}</div><div class="lab">${dots(c.colors)}${esc(c.name)}<br><span class="mut">${c.no}</span></div></div>`;
+      return `<div class="cthumb" data-no="${c.no}"><img loading="lazy" src="${imgSrc(c)}" data-src2="${c.src}"><div class="cov" style="color:${cov >= .999 ? 'var(--good)' : 'var(--acc)'}">${cov >= .999 ? '자동' : '미지원 부분 있음'}</div><div class="lab">${dots(c.colors)}${esc(c.name)}<br><span class="mut">${c.no}</span></div></div>`;
     }).join('');
     $('#grid').querySelectorAll('img[data-src2]').forEach(im => im.onerror = () => { im.onerror = null; im.src = im.dataset.src2; });
     $('#pager').innerHTML = pages > 1 ? `<button ${cardState.page ? '' : 'disabled'} id="pv">이전</button><span class="mut" style="align-self:center">${cardState.page + 1} / ${pages}</span><button ${cardState.page < pages - 1 ? '' : 'disabled'} id="nx">다음</button>` : '';
@@ -134,7 +137,7 @@ export function showCard(no) {
       <div class="kv"><div>종류</div><div>${TYPE_KO[c.type]} ${dots(c.colors)}</div>${c.type === 'leader' ? `<div>라이프</div><div>${c.life}</div>` : `<div>코스트</div><div>${c.cost ?? '-'}</div>`}<div>파워</div><div>${c.power ?? '-'}</div><div>카운터</div><div>${c.counter ? '+' + c.counter : '없음'}</div><div>특징</div><div>${c.traits.map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div><div>속성</div><div>${esc(c.attr.join(', ') || '-')}</div></div>
       <h2>카드 원문</h2><div class="orig">${txt.trim() ? highlightText(txt) : '<span class="mut">효과 없음 (바닐라 카드)</span>'}</div>
       ${ex.keywords?.length ? `<h2>키워드</h2>${ex.keywords.map(k => `<div class="ab"><b class="kwh">【${esc(String(k.name).replace(/[【】\[\]]/g, ''))}】</b> ${esc(k.text)}</div>`).join('')}` : ''}
-      ${ex.abilities?.length ? `<h2>쉽게 풀어보기</h2>${ex.abilities.map((a, k) => `<div class="ab"><div class="sent">${glossify(easySentence(a.sentence), db.glossary)}</div>${a.steps.map(s => `<div class="step"><div class="l">${esc(s.label)}</div><div>${glossify(easySentence(s.text), db.glossary)}</div></div>`).join('')}${a.manual ? '<div class="warn">이 부분은 게임에서 자동 처리가 안 돼서, 대전 중에 수동 조작으로 처리해요</div>' : ''}</div>`).join('')}` : ''}
+      ${ex.abilities?.length ? `<h2>쉽게 풀어보기</h2>${ex.abilities.map((a, k) => `<div class="ab"><div class="sent">${glossify(easySentence(a.sentence), db.glossary)}</div>${a.steps.map(s => `<div class="step"><div class="l">${esc(s.label)}</div><div>${glossify(easySentence(s.text), db.glossary)}</div></div>`).join('')}${a.manual ? '<div class="warn">이 부분은 자동 판정을 지원하지 않아 대전에서 적용되지 않을 수 있어요</div>' : ''}</div>`).join('')}` : ''}
       ${(() => { const e2 = E.effectsOf(db, no); const tips = [...new Set(e2.abilities.flatMap(a => tipsFor(a, [])).concat(tipsFor(null, e2.keywords || [])))]; return tips.length ? `<h2>왜 중요해요?</h2>${tips.map(t => `<div class="step"><div class="l">팁</div><div>${esc(t)}</div></div>`).join('')}` : ''; })()}
       ${ex.unparsed?.length ? `<div class="warn">자동 해석 안 된 문장: ${ex.unparsed.map(esc).join(' / ')}</div>` : ''}
       ${gl.length ? `<h2>나오는 용어</h2>${gl.map(k => `<div class="step"><div class="l">${esc(k)}</div><div>${esc(db.glossary[k])}</div></div>`).join('')}` : ''}
@@ -216,7 +219,7 @@ export function buildDemo(no) {
   } else {
     me.hand.unshift(c.no); script.push({ p: 0, a: 'play', no: c.no }); note = c.text ? '필드에 있는 동안 계속 적용되는 효과예요. 파워/키워드 표시를 확인해 보세요' : '효과 없는 카드예요. 파워와 코스트로 싸워요';
   }
-  const G = E.createScenario({ players: [me, op], active, turn: active ? 4 : 3, ai: [false, false], sandbox: true }, db);
+  const G = E.createScenario({ players: [me, op], active, turn: active ? 4 : 3, ai: [false, false], sandbox: false }, db);
   // 리더 두웅!! 반영
   if (me.leaderDon) G.cards[G.players[0].leader].don = me.leaderDon;
   if (op.leaderDon) G.cards[G.players[1].leader].don = op.leaderDon;
@@ -236,7 +239,7 @@ async function runDemo(no) {
     const { G, script, note } = buildDemo(no);
     bg.querySelector('.nt').textContent = note;
     board && board.destroy();
-    board = new Board(bg.querySelector('.bd'), db, { me: 0, onCardInfo: n => { close(); showCard(n); }, send: async () => { } });
+    board = new Board(bg.querySelector('.bd'), db, { me: 0, mode:'demo', onCardInfo: n => { close(); showCard(n); }, send: async () => { } });
     board.o.slow = true;
     await board.update(G, []);
     const step = async (p, a) => { if (stop) return; try { E.apply(G, db, p, a); } catch (e) { board.toast(e.message); } const ev = G.events; G.events = []; await board.update(G, ev); };
@@ -302,7 +305,7 @@ export function autoDeck(leaderNo, seed = 1) {
   const L = db.cards.get(leaderNo);
   let s = seed; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const banned = new Set(db.reg.banned || []);
-  const pool = db.bases.filter(c => c.type !== 'leader' && !banned.has(c.no) && c.colors.length && c.colors.every(k => L.colors.includes(k)));
+  const pool = db.bases.filter(c => c.type !== 'leader' && !(L.base==='OP13-079' && c.type==='event' && c.cost>=2) && !banned.has(c.no) && c.colors.length && c.colors.every(k => L.colors.includes(k)));
   const score = c => (c.traits.some(t => L.traits.includes(t)) ? 3 : 0) + (c.counter ? 1 : 0) + (E.effectsOf(db, c.no).coverage ?? 0) + rnd();
   const want = { 1: 2, 2: 3, 3: 2, 4: 2, 5: 2, 6: 1, 7: 1, 8: 0, 9: 0, 10: 0 };
   const picked = [];
@@ -331,33 +334,37 @@ function pagePlay(main, arg) {
   main.innerHTML = `<h1>연습 대전 (AI)</h1><div class="filters">
     <label>내 덱 <select id="d0" style="max-width:300px">${deckOptions(arg || defaultDeckId(0))}</select></label>
     <label>AI 덱 <select id="d1" style="max-width:300px">${deckOptions(defaultDeckId(1))}</select></label>
-    <label>순서 <select id="fp"><option value="r">랜덤</option><option value="0">내가 선공</option><option value="1">내가 후공</option></select></label>
-    <label class="mut"><input type="checkbox" id="sb" checked> 수동 조작 항상 허용(연습용)</label>
-    <button class="pri" id="go">대전 시작</button></div>
-    <div id="bd"><div class="intro">
-      <h2 style="margin-top:0">처음이라면 이렇게 해보세요</h2>
-      <ol>
-        <li><b>내 덱</b>은 그대로 두고(공식 추천 덱), <b>AI 덱</b>도 아무거나 괜찮아요.</li>
-        <li>노란 <b>대전 시작</b> 버튼을 누르세요.</li>
-        <li>첫 손패가 나오면 <b>이대로 시작</b>을 누르면 돼요.</li>
-        <li>내 차례가 되면 <b>코치</b>가 카드 위에 <span class="ctag ok" style="position:static">낼 수 있어</span> <span class="ctag no" style="position:static">두웅!! 부족</span> 같은 표시와 ①②③ 추천 순서를 보여주고, 말풍선으로 다음에 할 걸 가리켜요.</li>
-        <li>카드를 누르면 메뉴가 나와요(내기 / 어택하기 / 두웅!! 붙이기). 카드에 마우스를 올리면 크게 보여요.</li>
-      </ol>
-      <div class="mut">코치 표시는 연습 대전·튜토리얼에서만 나오고, 사람 vs 사람 대전에서는 나오지 않아요. 오른쪽 '초보 도우미' 버튼으로 끌 수 있어요.</div>
-    </div></div>`;
+    <button class="pri" id="go">가위바위보로 시작</button></div>
+    <div id="order-note" role="status"></div><div id="bd"><section class="intro"><h2>첫 턴은 이렇게 시작해</h2>
+    <p>가위바위보에서 이긴 사람이 선공이나 후공을 골라. 그다음 첫 패 5장을 보고, 그대로 시작하거나 딱 한 번 전부 바꿀 수 있어.</p>
+    <p>턴 드로우와 두웅!!은 게임이 알아서 처리해. 선공 첫 턴에는 카드를 뽑지 않고 두웅!! 1장만 받아. 낼 카드가 없으면 <b>턴 종료</b>를 눌러. 양쪽 모두 자기 첫 턴에는 어택할 수 없어.</p></section></div>`;
   if (!arg) $('#d1').selectedIndex = Math.min(1, $('#d1').options.length - 1);
   let match, board;
   const start = () => {
-    match && match.stop(); board && board.destroy();
-    const d0 = getDeck($('#d0').value), d1 = getDeck($('#d1').value);
-    const fp = $('#fp').value === 'r' ? (Math.random() < .5 ? 0 : 1) : +$('#fp').value;
-    const G = E.createGame({ decks: [d0, d1], names: ['나', 'AI'], first: fp, ai: [false, true], sandbox: $('#sb').checked }, db);
-    board = new Board($('#bd'), db, { me: 0, onCardInfo: showCard, onRestart: start });
-    match = new LocalMatch(board, db, G, {});
-    match.start();
+    match?.stop(); board?.destroy(); match = board = null;
+    const setup = newOpening(), root = $('#bd'), ui = $('#go').closest('.filters');
+    const ds = [getDeck($('#d0').value),getDeck($('#d1').value)];
+    ui.hidden = true; ui.style.display='none'; $('#order-note').textContent='';
+    const again = () => { match?.stop(); board?.destroy(); pagePlay(main,arg); };
+    const launch = () => {
+      const first = setup.first;
+      $('#order-note').textContent = (setup.winner===0 ? '내가 이겼어. ' : 'AI가 이겼어. ') + (first===0 ? '내가 선공, AI가 후공이야.' : 'AI가 선공, 내가 후공이야.');
+      const G = E.createGame({decks:ds,names:['나','AI'],first,orderChooser:setup.winner,ai:[false,true],sandbox:false},db);
+      board = new Board(root,db,{me:0,onCardInfo:showCard,onRestart:again});
+      match = new LocalMatch(board,db,G,{}); match.start();
+    };
+    const draw = () => {
+      // AI는 사람의 선택 전에 손을 확정한다.
+      if(setup.winner===null && setup.hands[1]===null) applyOpening(setup,1,{kind:'throw',round:setup.round,hand:HANDS[Math.floor(Math.random()*3)]});
+      drawOpening(root,{...openingView(setup,0),leaders:leaderLabels(ds.map(d=>d.leader))},0,a=>{
+        applyOpening(setup,0,a);
+        if(setup.winner===1) applyOpening(setup,1,{kind:'order',round:setup.round,first:Math.random()<0.5?0:1});
+        if(setup.first!==null) launch(); else draw();
+      });
+    }; draw();
   };
-  $('#go').onclick = start;
-  current = { cleanup: () => { match && match.stop(); board && board.destroy(); } };
+  $('#go').onclick=start;
+  current={cleanup:()=>{match?.stop();board?.destroy();}};
 }
 
 // ---------------- 규칙/용어 ----------------
@@ -369,7 +376,7 @@ function pageRules(main) {
     <ul><li>리더 1장 + 메인 덱 50장 + 두웅!! 덱 10장</li><li>리더 색에 포함된 색 카드만, 같은 카드 번호 4장까지</li><li>블록 로테이션 없음 (한글판 발매 카드 전부 사용 가능)</li><li>발매 7일이 안 된 새 카드 번호는 사용 불가</li></ul>
     <h3>금지 카드</h3><div>${(r.banned || []).map(n => { const c = db.cards.get(n); return `<span class="chip" data-no="${n}" style="cursor:pointer">${n} ${esc(c?.name || '')}</span>`; }).join('')}</div>
     <h3>금지 페어 (같은 덱에 같이 못 넣음)</h3><div>${(r.pairs || []).map(([a, b]) => `<div class="chip">${a} ${esc(db.cards.get(a)?.name || '')} ✕ ${b} ${esc(db.cards.get(b)?.name || '')}</div>`).join('')}</div>
-    <h2>게임 흐름 한눈에</h2>
+    <h2>게임 흐름 한눈에</h2><p><a href="https://onepiece-cardgame.kr/image/rule_manual.pdf" target="_blank" rel="noopener">한국 공식 룰 매뉴얼 7~11쪽</a></p><p>양쪽 리더를 공개하고 가위바위보 승자가 선후공을 정해요. 첫 패 5장을 받고, 선공부터 한 번씩 전부 다시 뽑을지 결정해요. 이후 리더의 라이프 수만큼 덱 위에서 라이프를 놓고 시작해요.</p>
     <table class="simple"><tr><th>페이즈</th><th>하는 일</th></tr>
       <tr><td>리프레시</td><td>내 카드와 두웅!!을 전부 일으켜요(액티브). 붙어 있던 두웅!!은 코스트 에리어로 돌아와요.</td></tr>
       <tr><td>드로우</td><td>1장 뽑아요. (선공 첫 턴은 안 뽑아요)</td></tr>
@@ -438,8 +445,8 @@ function pageLesson(main, id) {
     const st = L.steps[si];
     if (st.scenario || st.game) {
       match && match.stop(); board && board.destroy();
-      if (st.game) { const d0 = getDeck(st.game.myDeck || defaultDeckId(0)), d1 = getDeck(st.game.aiDeck || defaultDeckId(1)); G = E.createGame({ decks: [d0, d1], names: ['나', 'AI'], first: st.game.first ?? 0, ai: [false, true], sandbox: st.game.sandbox ?? false }, db); }
-      else G = E.createScenario({ ai: [false, true], sandbox: true, ...st.scenario }, db);
+      if (st.game) { const d0 = getDeck(st.game.myDeck || defaultDeckId(0)), d1 = getDeck(st.game.aiDeck || defaultDeckId(1)); G = E.createGame({ decks: [d0, d1], names: ['나', 'AI'], first: st.game.first ?? 0, ai: [false, true], sandbox: false }, db); }
+      else G = E.createScenario({ ai: [false, true], ...st.scenario, sandbox: false }, db);
       board = new Board($('#bd'), db, { me: 0, onCardInfo: showCard, onRestart: () => { si--; next(); } });
       const orig = board.render.bind(board); board.render = () => { orig(); applyHL(); };
       match = new LocalMatch(board, db, G, { onEvents: (a, evs, p) => { if (advancing) return; const w = L.steps[si]?.wait; if (matches(w, a, evs, p)) { advancing = true; const mm = match; mm.hold = true; setTimeout(() => { advancing = false; mm.hold = false; next(); }, 900); } } });
@@ -454,11 +461,11 @@ function pageLesson(main, id) {
 // ---------------- 온라인 대전 ----------------
 // 두 가지 방식: (1) 인터넷 P2P: 방장 브라우저가 규칙 판정(엔진), 상대는 화면/액션만 주고받음 (PeerJS)
 //              (2) 사내 서버: node server/server.mjs 의 WebSocket (서버가 판정)
-const PEER_PREFIX = 'oddlys-opcg-academy-';
+const PEER_PREFIX = 'oddlys-opcg-rps1-';
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] };
 function loadPeer() {
   if (window.Peer) return Promise.resolve();
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261818'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'ui/peerjs.min.js?v=202611261836'; s.onload = res; s.onerror = () => rej(new Error('PeerJS 로드 실패')); document.head.appendChild(s); });
 }
 function pageOnline(main) {
   setNav('online');
@@ -473,6 +480,7 @@ function pageOnline(main) {
     <div class="filters"><button class="pri" id="mk">방 만들기</button><input id="code" placeholder="방 코드" style="width:120px;text-transform:uppercase"><button id="jn">참가</button><span class="mut" id="st"></span></div><div id="bd"></div>`;
   $('#mode').onchange = e => { $('#urlw').style.display = e.target.value === 'ws' ? '' : 'none'; };
   let ws, board, peer, conn, G;
+  const openingPanel = (m,send) => { st(`방 ${m.code} · 대전 준비`); drawOpening($('#bd'),{...m.view,leaders:leaderLabels(m.leaders)},m.you,send); };
   const st = t => { $('#st').textContent = t; };
   const cleanup = () => { try { ws && ws.close(); } catch { } try { conn && conn.close(); } catch { } try { peer && peer.destroy(); } catch { } board && board.destroy(); board = null; };
   const showState = async (you, names, state, events, code) => {
@@ -492,6 +500,7 @@ function pageOnline(main) {
     ws.onerror = () => st('서버 연결 실패: 서버가 켜져 있는지 확인해 주세요');
     ws.onmessage = async (m) => {
       const msg = JSON.parse(m.data);
+      if (msg.t === 'opening') openingPanel(msg, action=>ws.send(JSON.stringify({t:'opening',action})));
       if (msg.t === 'room') { $('#code').value = msg.code; st(`방 코드 ${msg.code} · 상대를 기다리는 중`); }
       if (msg.t === 'error') { st(msg.message); board && board.toast(msg.message); }
       if (msg.t === 'state') await showState(msg.you, msg.names, msg.state, msg.events, msg.code);
@@ -511,7 +520,7 @@ function pageOnline(main) {
     peer.on('connection', c => {
       if (conn && conn.open) { c.on('open', () => { c.send({ t: 'error', message: '방이 꽉 찼어요' }); setTimeout(() => c.close(), 500); }); return; }
       conn = c;
-      let names;
+      let names, otherDeck, opening; G=null;
       const push = async (events) => {
         const ev = events || [];
         conn.open && conn.send({ t: 'state', you: 1, names, code, state: E.viewFor(G, 1), events: ev });
@@ -521,14 +530,26 @@ function pageOnline(main) {
         try { E.apply(G, db, p, a); } catch (e) { if (p === 1) conn.send({ t: 'error', message: e.message }); else board && board.toast(e.message); return; }
         const ev = G.events; G.events = []; await push(ev);
       };
+      const updateOpening = () => {
+        const leaders=[myDeck.leader,otherDeck.leader];
+        c.send({t:'opening',you:1,code,leaders,view:openingView(opening,1)});
+        openingPanel({you:0,code,leaders,view:openingView(opening,0)}, a=>step(0,a));
+      };
+      const step = async (p,a) => {
+        if (!opening || G) return;
+        try { applyOpening(opening,p,a); } catch(e) { if(p===1)c.send({t:'error',message:e.message}); return; }
+        if(opening.first===null){updateOpening();return;}
+        G=E.createGame({decks:[myDeck,otherDeck],names,first:opening.first,orderChooser:opening.winner,ai:[false,false],sandbox:false},db);
+        const ev=G.events; G.events=[]; await push(ev);
+      };
       sendAction = a => act(0, a);
       c.on('data', async (m) => {
-        if (m.t === 'join') {
+        if (m.t === 'join' && !opening && !G) {
           const err = validateDeck(db, db.reg, m.deck); if (err) { c.send({ t: 'error', message: '덱 오류: ' + err }); return; }
           names = [myName, m.name || '상대'];
-          G = E.createGame({ decks: [myDeck, m.deck], names, first: Math.random() < .5 ? 0 : 1, ai: [false, false], sandbox: false }, db);
-          const ev = G.events; G.events = []; await push(ev);
+          otherDeck=m.deck; opening=newOpening(); updateOpening();
         }
+        if (m.t === 'opening') await step(1,m.action);
         if (m.t === 'act' && G) await act(1, m.action);
       });
       c.on('close', () => { st('상대 연결이 끊겼어요'); board && board.toast('상대 연결이 끊겼어요'); });
@@ -549,6 +570,7 @@ function pageOnline(main) {
       conn.on('open', () => { st('연결됨 · 게임 준비 중'); conn.send({ t: 'join', name: $('#nm').value, deck }); });
       conn.on('data', async (m) => {
         if (m.t === 'error') { st(m.message); board && board.toast(m.message); }
+        if (m.t === 'opening') openingPanel(m,action=>conn.send({t:'opening',action}));
         if (m.t === 'state') await showState(m.you, m.names, m.state, m.events, m.code);
         if (pendingResolve) { pendingResolve(); pendingResolve = null; }
       });

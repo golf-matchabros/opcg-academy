@@ -1,6 +1,6 @@
 // 코치: "낼 수 있다" 와 "지금 내면 좋다" 를 구분해서 설명
-import * as E from '../engine/core.js?v=202611261818';
-import { condText, targetText, explainAbility } from '../engine/explain.js?v=202611261818';
+import * as E from '../engine/core.js?v=202611261836';
+import { condText, targetText, explainAbility } from '../engine/explain.js?v=202611261836';
 
 const KW = { blocker: '블로커', rush: '속공', rushCharacter: '속공(캐릭터만)', doubleAttack: '더블 어택', banish: '배니시', unblockable: '블록 불가' };
 
@@ -20,7 +20,7 @@ export function roleOf(db, c) {
   if (timings.has('whenAttacking')) role.push('어택할 때 효과가 있는 카드');
   if (timings.has('counter')) role.push('상대 공격을 막는 카운터 이벤트');
   if (timings.has('main') && c.type === 'event') role.push('내 턴에 쓰는 이벤트');
-  if (timings.has('trigger')) role.push('라이프에서 나오면 공짜로 발동(트리거)');
+  if (timings.has('trigger')) role.push('라이프에서 패로 가져올 때 선택하는 트리거가 있는 카드');
   if (!eff.abilities.length && !kws.length) role.push('효과 없는 카드(파워로 싸우는 몸통)');
   return { line: s, role: role.join(', ') };
 }
@@ -37,12 +37,12 @@ export function evalPlay(G, db, uid, me) {
     if (ab.condition) {
       const v = E.evalCond(G, db, ab.condition, ctx);
       if (v === false) { bad.push(`${label}의 조건이 지금 안 맞아서 효과가 안 나요 (조건: ${condText(ab.condition)})`); continue; }
-      if (v === 'unknown') info.push(`${label} 조건은 직접 확인해야 해요: ${condText(ab.condition)}`);
+      if (v === 'unknown') { info.push(`${label} 조건은 자동 판정을 지원하지 않아요: ${condText(ab.condition)}`); continue; }
     }
     if (ab.cost && ab.cost.length && !E.canPay(G, db, ab.cost, ctx)) { bad.push(`${label}을 쓰려면 비용이 필요한데 지금은 낼 수 없어요`); continue; }
     let fizz = false;
     for (const st of ab.steps || []) {
-      if (st.do === 'manual') { info.push('효과 일부는 자동으로 안 돼서 직접 처리해야 해요'); continue; }
+      if (st.do === 'manual') { info.push('미지원 효과는 적용되지 않아요'); fizz = true; continue; }
       const t = st.target;
       if (t && !t.thisCard && ['ko', 'rest', 'bounce', 'toDeckBottom', 'power', 'grant', 'costMod', 'negate', 'attachDon', 'setActive'].includes(st.do)) {
         let cands = E.targetCandidates(G, db, t, ctx);
@@ -62,11 +62,15 @@ export function evalPlay(G, db, uid, me) {
     }
     if (!fizz && !bad.length) { try { good.push(`지금 내면 효과가 제대로 나요: ${explainAbility(ab, c).result}`); } catch { good.push('지금 내면 효과가 제대로 나요'); } }
   }
+  if(c.type==='event' && (P.turnsTaken===1 || (P.turnsTaken===undefined && G.turn<=2)) && playAbs.length && playAbs.every(ab => ab.steps?.length && ab.steps.every(st => st.duration==='turn' && st.target?.side==='self' && ((st.do==='grant' && ['unblockable','rush','rushCharacter','banish','doubleAttack'].includes(st.keyword)) || (st.do==='power' && st.amount>0))))) {
+    good.length=0; bad.push('지금 낼 수는 있지만 첫 턴이라 어택할 수 없어요. 이 효과는 이번 턴이 끝나면 사라져요.');
+    if(eff.abilities.some(ab=>ab.timing==='counter')) info.push('손에 남겨 두면 나중에 상대의 어택에 카운터로 쓸 수 있어요');
+  }
   const kws = eff.keywords || [];
   if (c.type === 'character') {
     if (kws.includes('rush') && G.turn > 2) good.push('【속공】이라 내자마자 바로 어택할 수 있어요');
     if (kws.includes('blocker')) info.push('【블로커】라 상대 턴에 내 리더를 지켜줘요');
-    if (!playAbs.length && !kws.length) info.push('효과는 없지만 필드에 캐릭터를 늘려 다음 턴 어택/블록에 쓸 수 있어요');
+    if (!playAbs.length && !kws.length) info.push('낼 때 바로 쓰는 효과는 없어요. 다음 내 턴부터 어택에 쓸 수 있어요');
     if (bad.length) info.push('효과는 안 나도 필드에 캐릭터를 늘리는 의미는 있어요');
     if (P.chars.length >= E.MAX_CHARS) bad.push('필드가 5장으로 꽉 차서 한 장을 트래시로 보내야 해요');
   }

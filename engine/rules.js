@@ -2,9 +2,11 @@
 export function validateDeck(db, reg, d) {
   if (!d || !d.leader || !Array.isArray(d.cards)) return '덱 정보가 없어요';
   const L = db.cards.get(d.leader); if (!L || L.type !== 'leader') return '리더 카드가 올바르지 않아요';
+  if(!d.cards.every(x=>x && Number.isInteger(x.count) && x.count>0 && x.count<=50)) return '카드 매수가 올바르지 않아요';
   let total = 0; const counts = {};
   for (const { no, count } of d.cards) {
     const c = db.cards.get(no); if (!c) return `없는 카드: ${no}`;
+    if(L.base==='OP13-079' && c.type==='event' && c.cost>=2) return '임 리더 덱에는 코스트 2 이상인 이벤트를 넣을 수 없어요';
     if (c.type === 'leader') return '메인 덱에 리더를 넣을 수 없어요';
     if (!c.colors.every(k => L.colors.includes(k))) return `리더 색이 아닌 카드: ${c.name}`;
     counts[c.base] = (counts[c.base] || 0) + count; if (counts[c.base] > 4) return `4장 초과: ${c.name}`;
