@@ -23,6 +23,7 @@ async function boot() {
   cards.sort((a, b) => { const x = ord(a), y = ord(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.no.localeCompare(b.no); });
   db.list = cards; db.cards = new Map(cards.map(c => [c.no, c])); db.effects = effects; db.decks = decks; db.glossary = glossary; db.reg = reg; db.lessons = lessons;
   db.bases = cards.filter(c => !c.parallel);
+  const sz0 = localStorage.getItem('cardsize') || 'l'; if (sz0 !== 'm') document.body.classList.add('sz-' + sz0);
   // 용어/배지 툴팁: data-tip 속성에 마우스를 올리거나 탭하면 설명
   const tip = document.createElement('div'); tip.className = 'tipbox'; tip.style.display = 'none'; document.body.appendChild(tip);
   const showTip = (n, x, y) => { tip.textContent = n.dataset.tip; tip.style.display = ''; tip.style.left = Math.min(window.innerWidth - 300, x + 12) + 'px'; tip.style.top = (y + 16) + 'px'; };

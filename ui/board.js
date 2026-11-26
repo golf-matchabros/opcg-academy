@@ -20,12 +20,31 @@ export class Board {
     this.root = root; this.db = db; this.o = Object.assign({ me: 0, speed: 1, slow: false }, opts);
     this.G = null; this.sel = null; this.picks = []; this.rects = {}; this.busy = false; this.lastAbility = null;
     if (this.o.assist === undefined) this.o.assist = localStorage.getItem('assist') !== '0';
-    root.innerHTML = `<div class="play-wrap"><div class="board"></div><aside class="panel"><div class="assist"></div><div class="preview" style="display:none"></div><h3>효과 해설</h3><div class="explain mut">카드가 효과를 쓰면 여기서 단계별로 풀어 보여줘요. 카드에 마우스를 올리면 위에 쉬운 설명이 나와요.</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ghost as">초보 도우미: ${this.o.assist ? '켜짐' : '꺼짐'}</button><button class="ghost sp">연출 속도: 보통</button><button class="ghost lg">로그 지우기</button></div><div class="log"></div></aside></div>`;
+    root.innerHTML = `<div class="play-wrap"><div class="board"></div><aside class="panel"><div class="assist"></div><div class="preview" style="display:none"></div><h3>효과 해설</h3><div class="explain mut">카드가 효과를 쓰면 여기서 단계별로 풀어 보여줘요. 카드에 마우스를 올리면 위에 쉬운 설명이 나와요.</div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="sizebar">카드 크기 <button data-sz="s">작게</button><button data-sz="m">보통</button><button data-sz="l">크게</button></div><div class="sizebar">확대 보기 <button class="zm">${localStorage.getItem('zoom') === '0' ? '꺼짐' : '켜짐'}</button></div><button class="ghost as">초보 도우미: ${this.o.assist ? '켜짐' : '꺼짐'}</button><button class="ghost sp">연출 속도: 보통</button><button class="ghost lg">로그 지우기</button></div><div class="log"></div></aside></div>`;
     this.el = root.querySelector('.board');
     this.asEl = root.querySelector('.assist'); this.pvEl = root.querySelector('.preview');
     root.querySelector('.as').onclick = (e) => { this.o.assist = !this.o.assist; localStorage.setItem('assist', this.o.assist ? '1' : '0'); e.target.textContent = '초보 도우미: ' + (this.o.assist ? '켜짐' : '꺼짐'); this.render(); };
     this.el.addEventListener('mouseover', e => { const n = e.target.closest('[data-uid]'); if (n && n.dataset.uid !== this._hov) { this._hov = n.dataset.uid; this.preview(n.dataset.uid); } });
-    this.el.addEventListener('mouseleave', () => { this._hov = null; this.pvEl.style.display = 'none'; });
+    this.el.addEventListener('mouseleave', () => { this._hov = null; this.pvEl.style.display = 'none'; this.hideZoom(); });
+    // 카드 크기
+    const applySz = (v) => { document.body.classList.remove('sz-s', 'sz-l'); if (v !== 'm') document.body.classList.add('sz-' + v); localStorage.setItem('cardsize', v); root.querySelectorAll('[data-sz]').forEach(b => b.classList.toggle('on', b.dataset.sz === v)); };
+    applySz(localStorage.getItem('cardsize') || 'l');
+    root.querySelectorAll('[data-sz]').forEach(b => b.onclick = () => { applySz(b.dataset.sz); this.render(); });
+    root.querySelector('.zm').onclick = (e) => { const on = localStorage.getItem('zoom') === '0'; localStorage.setItem('zoom', on ? '1' : '0'); e.target.textContent = on ? '켜짐' : '꺼짐'; if (!on) this.hideZoom(); };
+    // 확대 보기: 카드에 마우스를 올리면 크게
+    this.el.addEventListener('mousemove', e => {
+      if (localStorage.getItem('zoom') === '0') return;
+      const n = e.target.closest('[data-uid]'); const c = n && n.dataset.uid && this.cardOf(n.dataset.uid);
+      if (!c) { this.hideZoom(); return; }
+      if (!this.zoomEl) { this.zoomEl = document.createElement('div'); this.zoomEl.className = 'zoom'; this.zoomEl.innerHTML = '<img>'; document.body.appendChild(this.zoomEl); }
+      const im = this.zoomEl.querySelector('img');
+      if (this.zoomEl.dataset.no !== c.no) { this.zoomEl.dataset.no = c.no; im.src = imgSrc(c); const big = new Image(); big.onload = () => { if (this.zoomEl && this.zoomEl.dataset.no === c.no) im.src = big.src; }; big.src = imgBig(c); }
+      this.zoomEl.style.display = '';
+      const w = this.zoomEl.offsetWidth || 320, h = this.zoomEl.offsetHeight || 450;
+      let x = e.clientX + 24; if (x + w > window.innerWidth - 8) x = e.clientX - w - 24;
+      let y = e.clientY - h / 2; y = Math.max(8, Math.min(window.innerHeight - h - 8, y));
+      this.zoomEl.style.left = x + 'px'; this.zoomEl.style.top = y + 'px';
+    });
     this.el = root.querySelector('.board');
     this.exEl = root.querySelector('.explain');
     this.logEl = root.querySelector('.log');
@@ -34,7 +53,8 @@ export class Board {
     this.el.addEventListener('click', e => this.onClick(e));
     document.addEventListener('click', this._docClick = (e) => { if (this.menu && !this.menu.contains(e.target)) this.closeMenu(); }, true);
   }
-  destroy() { document.removeEventListener('click', this._docClick, true); this.closeMenu(); }
+  hideZoom() { if (this.zoomEl) this.zoomEl.style.display = 'none'; }
+  destroy() { document.removeEventListener('click', this._docClick, true); this.closeMenu(); if (this.zoomEl) { this.zoomEl.remove(); this.zoomEl = null; } }
   get me() { return this.o.me; }
   C(no) { return this.db.cards.get(no); }
   cardOf(uid) { const i = this.G.cards[uid]; return i && !i.hidden ? this.C(i.no) : null; }
@@ -244,14 +264,14 @@ export class Board {
       const to = toEl.getBoundingClientRect();
       const c = this.cardOf(e.uid);
       const g = document.createElement('div'); g.className = 'flyer';
-      Object.assign(g.style, { left: from.left + 'px', top: from.top + 'px', width: Math.min(from.width, 78) + 'px', height: Math.min(from.height, 109) + 'px' });
+      Object.assign(g.style, { left: from.left + 'px', top: from.top + 'px', width: from.width + 'px', height: from.height + 'px' });
       g.innerHTML = c ? `<img src="${imgSrc(c)}">` : '<div class="card back" style="width:100%;height:100%"></div>';
       document.body.appendChild(g); ghosts.push([g, to]);
       if (toEl.dataset.uid) toEl.style.visibility = 'hidden';
     }
     if (ghosts.length) {
       await sleep(30);
-      ghosts.forEach(([g, to]) => Object.assign(g.style, { left: to.left + 'px', top: to.top + 'px', width: Math.min(to.width, 78) + 'px', height: Math.min(to.height, 109) + 'px' }));
+      ghosts.forEach(([g, to]) => Object.assign(g.style, { left: to.left + 'px', top: to.top + 'px', width: to.width + 'px', height: to.height + 'px' }));
       await sleep(480 * sp);
       ghosts.forEach(([g]) => g.remove());
       this.el.querySelectorAll('[data-uid]').forEach(n => n.style.visibility = '');
@@ -354,6 +374,7 @@ export class Board {
     if (m[a]) this.send(m[a]);
   }
   onClick(e) {
+    this.hideZoom();
     const n = e.target.closest('[data-uid]');
     if (e.target.closest('.ctrl button')) return;
     if (!n || !n.dataset.uid || !this.G || this.busy) { if (e.target.closest('[data-trash]')) this.showTrash(+e.target.closest('[data-trash]').dataset.trash); return; }
